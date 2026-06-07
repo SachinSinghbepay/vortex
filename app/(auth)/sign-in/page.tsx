@@ -1,13 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { Suspense, useState } from "react"
 import { signIn } from "next-auth/react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { Brain, Eye, EyeOff, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
-export default function SignInPage() {
+function SignInForm() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
@@ -90,7 +90,7 @@ export default function SignInPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 transition hover:text-white/60"
                   tabIndex={-1}
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -116,5 +116,13 @@ export default function SignInPage() {
         </p>
       </div>
     </div>
+  )
+}
+
+export default function SignInPage() {
+  return (
+    <Suspense>
+      <SignInForm />
+    </Suspense>
   )
 }
