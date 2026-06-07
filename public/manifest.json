@@ -1,0 +1,47 @@
+{
+  "name": "Cortex — AI Productivity OS",
+  "short_name": "Cortex",
+  "description": "Your AI-powered cognitive operating system. Break down goals, beat burnout, and work smarter every day.",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#030303",
+  "theme_color": "#7c3aed",
+  "categories": ["productivity", "lifestyle", "education"],
+  "icons": [
+    {
+      "src": "/icon",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "short_name": "Home",
+      "url": "/dashboard",
+      "icons": [{ "src": "/icon", "sizes": "512x512" }]
+    },
+    {
+      "name": "Goals",
+      "short_name": "Goals",
+      "url": "/goals",
+      "icons": [{ "src": "/icon", "sizes": "512x512" }]
+    },
+    {
+      "name": "AI Tools",
+      "short_name": "AI",
+      "url": "/ai",
+      "icons": [{ "src": "/icon", "sizes": "512x512" }]
+    }
+  ]
+}

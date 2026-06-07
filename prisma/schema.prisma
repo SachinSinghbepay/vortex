@@ -1,0 +1,156 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── NextAuth required models ───────────────────────────────────────────────
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─── App models ─────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  plan                Plan     @default(FREE)
+  emailNotifications  Boolean  @default(false)
+  createdAt           DateTime @default(now())
+
+  accounts   Account[]
+  sessions   Session[]
+  goals      Goal[]
+  tasks      Task[]
+  focusLogs  FocusLog[]
+  aiAnalyses AIAnalysis[]
+}
+
+model Goal {
+  id          String     @id @default(cuid())
+  title       String
+  description String?
+  deadline    DateTime?
+  priority    Priority   @default(MEDIUM)
+  progress    Int        @default(0)
+  status      GoalStatus @default(ACTIVE)
+  type        GoalType   @default(PERSONAL)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tasks  Task[]
+}
+
+model Task {
+  id        String    @id @default(cuid())
+  title     String
+  completed Boolean   @default(false)
+  startDate DateTime?
+  dueDate   DateTime?
+  priority  Priority  @default(MEDIUM)
+  category  String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goalId String?
+  goal   Goal?  @relation(fields: [goalId], references: [id], onDelete: SetNull)
+}
+
+model FocusLog {
+  id        String   @id @default(cuid())
+  energy    Int
+  focus     Int
+  stress    Int
+  duration  Int      @default(25)
+  taskTitle String?
+  notes     String?
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AIAnalysis {
+  id        String   @id @default(cuid())
+  type      String
+  prompt    String
+  response  String
+  goalId    String?
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum Plan {
+  FREE
+  PRO
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum GoalStatus {
+  ACTIVE
+  COMPLETED
+  PAUSED
+  FAILED
+}
+
+enum GoalType {
+  LEARNING
+  FITNESS
+  CAREER
+  PERSONAL
+  CUSTOM
+}

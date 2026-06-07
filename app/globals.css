@@ -1,0 +1,167 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --background: oklch(0.98 0 0);
+    --foreground: oklch(0.145 0 0);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.145 0 0);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.145 0 0);
+    --primary: oklch(0.205 0 0);
+    --primary-foreground: oklch(0.985 0 0);
+    --secondary: oklch(0.97 0 0);
+    --secondary-foreground: oklch(0.205 0 0);
+    --muted: oklch(0.97 0 0);
+    --muted-foreground: oklch(0.556 0 0);
+    --accent: oklch(0.97 0 0);
+    --accent-foreground: oklch(0.205 0 0);
+    --destructive: oklch(0.577 0.245 27.325);
+    --border: oklch(0.88 0 0);
+    --input: oklch(0.922 0 0);
+    --ring: oklch(0.708 0 0);
+    --radius: 0.625rem;
+    --surface: oklch(1 0 0);
+    --surface-raised: oklch(0.97 0 0);
+    --surface-border: oklch(0.88 0 0);
+  }
+
+  .dark {
+    --background: oklch(0.09 0 0);
+    --foreground: oklch(0.985 0 0);
+    --card: oklch(0.13 0 0);
+    --card-foreground: oklch(0.985 0 0);
+    --popover: oklch(0.13 0 0);
+    --popover-foreground: oklch(0.985 0 0);
+    --primary: oklch(0.985 0 0);
+    --primary-foreground: oklch(0.205 0 0);
+    --secondary: oklch(0.269 0 0);
+    --secondary-foreground: oklch(0.985 0 0);
+    --muted: oklch(0.269 0 0);
+    --muted-foreground: oklch(0.708 0 0);
+    --accent: oklch(0.269 0 0);
+    --accent-foreground: oklch(0.985 0 0);
+    --destructive: oklch(0.704 0.191 22.216);
+    --border: oklch(1 0 0 / 8%);
+    --input: oklch(1 0 0 / 12%);
+    --ring: oklch(0.556 0 0);
+    --surface: oklch(1 0 0 / 2%);
+    --surface-raised: oklch(1 0 0 / 4%);
+    --surface-border: oklch(1 0 0 / 6%);
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-border: var(--surface-border);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* ── Light mode: invert dark-first white-opacity classes ─────────────────── */
+/* !important beats Tailwind's utility layer in all cases.                    */
+html:not(.dark) {
+
+  /* ── Text ─────────────────────────────────────────────────────────────── */
+  .text-white      { color: oklch(0.145 0 0) !important; }
+  .text-white\/80  { color: oklch(0.145 0 0 / 80%) !important; }
+  .text-white\/75  { color: oklch(0.145 0 0 / 75%) !important; }
+  .text-white\/70  { color: oklch(0.145 0 0 / 70%) !important; }
+  .text-white\/65  { color: oklch(0.145 0 0 / 65%) !important; }
+  .text-white\/60  { color: oklch(0.145 0 0 / 60%) !important; }
+  .text-white\/55  { color: oklch(0.145 0 0 / 55%) !important; }
+  .text-white\/50  { color: oklch(0.145 0 0 / 50%) !important; }
+  .text-white\/45  { color: oklch(0.145 0 0 / 45%) !important; }
+  .text-white\/40  { color: oklch(0.145 0 0 / 40%) !important; }
+  .text-white\/35  { color: oklch(0.145 0 0 / 35%) !important; }
+  .text-white\/30  { color: oklch(0.145 0 0 / 30%) !important; }
+  .text-white\/25  { color: oklch(0.145 0 0 / 25%) !important; }
+  .text-white\/20  { color: oklch(0.145 0 0 / 20%) !important; }
+  .text-white\/15  { color: oklch(0.145 0 0 / 15%) !important; }
+  .text-white\/10  { color: oklch(0.145 0 0 / 10%) !important; }
+  /* text-white/0 stays transparent — used for hover-reveal icons */
+
+  /* ── Backgrounds ──────────────────────────────────────────────────────── */
+  .bg-white\/2,  .bg-white\/\[0\.02\]  { background-color: oklch(0 0 0 / 3%) !important; }
+  .bg-white\/3,  .bg-white\/\[0\.03\]  { background-color: oklch(0 0 0 / 4%) !important; }
+  .bg-white\/4,  .bg-white\/\[0\.04\]  { background-color: oklch(0 0 0 / 5%) !important; }
+  .bg-white\/5,  .bg-white\/\[0\.05\]  { background-color: oklch(0 0 0 / 6%) !important; }
+  .bg-white\/6,  .bg-white\/\[0\.06\]  { background-color: oklch(0 0 0 / 7%) !important; }
+  .bg-white\/7,  .bg-white\/\[0\.07\]  { background-color: oklch(0 0 0 / 8%) !important; }
+  .bg-white\/8,  .bg-white\/\[0\.08\]  { background-color: oklch(0 0 0 / 10%) !important; }
+  .bg-white\/10, .bg-white\/\[0\.1\]   { background-color: oklch(0 0 0 / 12%) !important; }
+
+  /* ── Borders ──────────────────────────────────────────────────────────── */
+  .border-white\/6,  .border-white\/\[0\.06\]  { border-color: oklch(0 0 0 / 8%) !important; }
+  .border-white\/7,  .border-white\/\[0\.07\]  { border-color: oklch(0 0 0 / 9%) !important; }
+  .border-white\/8,  .border-white\/\[0\.08\]  { border-color: oklch(0 0 0 / 10%) !important; }
+  .border-white\/10, .border-white\/\[0\.1\]   { border-color: oklch(0 0 0 / 12%) !important; }
+  .border-white\/15                            { border-color: oklch(0 0 0 / 15%) !important; }
+  .border-white\/20                            { border-color: oklch(0 0 0 / 20%) !important; }
+
+  /* ── Dividers ─────────────────────────────────────────────────────────── */
+  .divide-white\/4 > * + *               { border-color: oklch(0 0 0 / 5%) !important; }
+  .divide-white\/\[0\.04\] > * + *       { border-color: oklch(0 0 0 / 5%) !important; }
+
+  /* ── Hover backgrounds ────────────────────────────────────────────────── */
+  .hover\:bg-white\/2:hover              { background-color: oklch(0 0 0 / 3%) !important; }
+  .hover\:bg-white\/4:hover              { background-color: oklch(0 0 0 / 5%) !important; }
+  .hover\:bg-white\/5:hover              { background-color: oklch(0 0 0 / 6%) !important; }
+  .hover\:bg-white\/\[0\.02\]:hover      { background-color: oklch(0 0 0 / 3%) !important; }
+  .hover\:bg-white\/\[0\.04\]:hover      { background-color: oklch(0 0 0 / 5%) !important; }
+  .hover\:bg-white\/\[0\.07\]:hover      { background-color: oklch(0 0 0 / 8%) !important; }
+
+  /* ── Hover text ───────────────────────────────────────────────────────── */
+  .hover\:text-white\/50:hover           { color: oklch(0.145 0 0 / 50%) !important; }
+  .hover\:text-white\/60:hover           { color: oklch(0.145 0 0 / 60%) !important; }
+  .hover\:text-white\/70:hover           { color: oklch(0.145 0 0 / 70%) !important; }
+  .hover\:text-white\/80:hover           { color: oklch(0.145 0 0 / 80%) !important; }
+
+  /* ── Group-hover (icon reveal on card hover) ──────────────────────────── */
+  .group:hover .group-hover\:text-white\/20 { color: oklch(0.145 0 0 / 20%) !important; }
+  .group:hover .group-hover\:text-white\/25 { color: oklch(0.145 0 0 / 25%) !important; }
+
+  /* ── Placeholders ─────────────────────────────────────────────────────── */
+  .placeholder-white\/20::placeholder   { color: oklch(0.145 0 0 / 30%) !important; }
+  .placeholder-white\/25::placeholder   { color: oklch(0.145 0 0 / 35%) !important; }
+
+  /* ── Hardcoded dark backgrounds → light ──────────────────────────────── */
+  .bg-\[\#030303\], .bg-\[\#050505\], .bg-\[\#0a0a0a\] { background-color: oklch(0.97 0 0) !important; }
+  .bg-\[\#0d0d0d\]  { background-color: oklch(0.97 0 0) !important; }
+  .bg-\[\#111\]     { background-color: oklch(0.95 0 0) !important; }
+  .bg-\[\#1a1a1a\]  { background-color: oklch(0.93 0 0) !important; }
+
+  /* ── Select/option elements ───────────────────────────────────────────── */
+  select { background-color: oklch(0.95 0 0) !important; color: oklch(0.145 0 0) !important; }
+  option { background-color: white; color: oklch(0.145 0 0); }
+}
