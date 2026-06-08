@@ -7,6 +7,9 @@ export const pageVariants: Variants = {
   visible: { opacity: 1, y: 0, transition: { duration: 0.25, ease: "easeOut" } },
 }
 
+// Force GPU compositing to prevent Android Chrome paint glitch
+const gpuStyle = { transform: "translateZ(0)", willChange: "opacity, transform" }
+
 export const listVariants: Variants = {
   hidden: {},
   visible: { transition: { staggerChildren: 0.06 } },
@@ -24,6 +27,7 @@ export function PageTransition({ children, className }: { children: React.ReactN
       initial="hidden"
       animate="visible"
       variants={pageVariants}
+      style={gpuStyle}
     >
       {children}
     </motion.div>
