@@ -7,8 +7,8 @@ export const pageVariants: Variants = {
   visible: { opacity: 1, y: 0, transition: { duration: 0.25, ease: "easeOut" } },
 }
 
-// Force GPU compositing to prevent Android Chrome paint glitch
-const gpuStyle = { transform: "translateZ(0)", willChange: "opacity, transform" }
+// translateZ(0) promotes to own GPU layer; willChange omitted — it over-composites children on Android Chrome
+const gpuStyle = { transform: "translateZ(0)" }
 
 export const listVariants: Variants = {
   hidden: {},

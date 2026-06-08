@@ -168,7 +168,7 @@ function DecisionAnalysis() {
         />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="flex flex-col gap-4 sm:grid sm:grid-cols-2">
         {/* Pros */}
         <div className="space-y-1.5">
           <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Pros</label>
