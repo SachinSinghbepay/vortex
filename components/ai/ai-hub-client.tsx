@@ -53,8 +53,7 @@ function DecisionAnalysis() {
   const [result, setResult] = useState<DecisionResult | null>(null)
   const [error, setError] = useState("")
 
-  const addItem = (list: string[], set: (v: string[]) => void) =>
-    set([...list, ""])
+  const addItem = (list: string[], set: (v: string[]) => void) => set([...list, ""])
   const updateItem = (list: string[], set: (v: string[]) => void, i: number, val: string) => {
     const next = [...list]; next[i] = val; set(next)
   }
@@ -82,13 +81,13 @@ function DecisionAnalysis() {
     }
   }
 
-  const inputCls = "w-full rounded-lg border border-white/[0.07] bg-white/4 px-3.5 py-2 text-sm text-white placeholder-white/20 outline-none transition focus:border-violet-500/40 focus:bg-white/[0.07]"
+  // transition-colors only — avoids adding transform/backdrop-filter to transition list which can cause GPU glitches on Android Chrome
+  const inputCls = "w-full rounded-lg border border-white/10 bg-white/[0.06] px-3.5 py-2.5 text-sm text-white placeholder-white/25 outline-none transition-colors focus:border-violet-500/50 focus:bg-white/[0.09]"
 
   if (result) {
     const lean = leanConfig[result.leanToward]
     return (
       <div className="space-y-4">
-        {/* Verdict */}
         <div className={cn("rounded-xl border p-5", lean.bg, lean.border)}>
           <div className="mb-2 flex items-center justify-between">
             <span className={cn("text-xs font-semibold uppercase tracking-widest", lean.color)}>{lean.label}</span>
@@ -98,8 +97,7 @@ function DecisionAnalysis() {
           <p className="mt-2 text-sm text-white/60">{result.recommendation}</p>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          {/* Tradeoffs */}
+        <div className="space-y-3">
           <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
             <p className="mb-3 text-[11px] font-medium uppercase tracking-widest text-white/35">Tradeoffs</p>
             <ul className="space-y-2">
@@ -110,8 +108,6 @@ function DecisionAnalysis() {
               ))}
             </ul>
           </div>
-
-          {/* Risks */}
           <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
             <p className="mb-3 text-[11px] font-medium uppercase tracking-widest text-white/35">Risks</p>
             <ul className="space-y-2">
@@ -124,19 +120,13 @@ function DecisionAnalysis() {
           </div>
         </div>
 
-        {/* What people overlook */}
         <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-4">
-          <p className="mb-1.5 text-[11px] font-medium uppercase tracking-widest text-violet-400/60">
-            What most people overlook
-          </p>
+          <p className="mb-1.5 text-[11px] font-medium uppercase tracking-widest text-violet-400/60">What most people overlook</p>
           <p className="text-sm text-white/65">{result.overlooked}</p>
         </div>
 
-        {/* Next step */}
         <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
-          <p className="mb-1.5 text-[11px] font-medium uppercase tracking-widest text-emerald-400/60">
-            Next action
-          </p>
+          <p className="mb-1.5 text-[11px] font-medium uppercase tracking-widest text-emerald-400/60">Next action</p>
           <p className="text-sm text-white/65">{result.nextStep}</p>
         </div>
 
@@ -152,13 +142,11 @@ function DecisionAnalysis() {
   }
 
   return (
-    <div className="space-y-5">
-      <p className="text-sm text-white/40">
-        Describe your decision. AI will give you a direct recommendation — no hedging.
-      </p>
+    <div className="space-y-4">
+      <p className="text-sm text-white/40">Describe your decision. AI will give you a direct recommendation — no hedging.</p>
 
       <div className="space-y-1.5">
-        <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">The Decision</label>
+        <label className="block text-[11px] font-medium uppercase tracking-widest text-white/35">The Decision</label>
         <textarea
           value={decision}
           onChange={(e) => setDecision(e.target.value)}
@@ -168,64 +156,72 @@ function DecisionAnalysis() {
         />
       </div>
 
-      <div className="flex flex-col gap-4 sm:grid sm:grid-cols-2">
-        {/* Pros */}
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Pros</label>
-          <div className="space-y-2">
-            {pros.map((p, i) => (
-              <div key={i} className="flex gap-2">
-                <input
-                  value={p}
-                  onChange={(e) => updateItem(pros, setPros, i, e.target.value)}
-                  placeholder={`Pro ${i + 1}`}
-                  className={inputCls}
-                />
-                {pros.length > 1 && (
-                  <button onClick={() => removeItem(pros, setPros, i)} className="text-white/20 hover:text-white/50">
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
-            ))}
-            {pros.length < 5 && (
-              <button onClick={() => addItem(pros, setPros)} className="flex items-center gap-1 text-xs text-violet-400/60 hover:text-violet-400">
-                <Plus className="h-3 w-3" /> Add pro
-              </button>
-            )}
-          </div>
-        </div>
 
-        {/* Cons */}
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Cons</label>
-          <div className="space-y-2">
-            {cons.map((c, i) => (
-              <div key={i} className="flex gap-2">
-                <input
-                  value={c}
-                  onChange={(e) => updateItem(cons, setCons, i, e.target.value)}
-                  placeholder={`Con ${i + 1}`}
-                  className={inputCls}
-                />
-                {cons.length > 1 && (
-                  <button onClick={() => removeItem(cons, setCons, i)} className="text-white/20 hover:text-white/50">
-                    <X className="h-3.5 w-3.5" />
-                  </button>
+
+      <div className="space-y-1.5">
+        <label className="block text-[11px] font-medium uppercase tracking-widest text-white/35">Pros</label>
+        <div className="space-y-2" style={{ transform: "translateZ(0)" }}>
+          {pros.map((p, i) => (
+            <div key={i} className="relative">
+              <input
+                value={p}
+                onChange={(e) => updateItem(pros, setPros, i, e.target.value)}
+                placeholder={`Pro ${i + 1}`}
+                className={cn(inputCls, "pr-9")}
+              />
+              <button
+                type="button"
+                onClick={() => removeItem(pros, setPros, i)}
+                className={cn(
+                  "absolute inset-y-0 right-0 flex items-center pr-3",
+                  pros.length > 1 ? "text-white/20 hover:text-white/50" : "pointer-events-none opacity-0"
                 )}
-              </div>
-            ))}
-            {cons.length < 5 && (
-              <button onClick={() => addItem(cons, setCons)} className="flex items-center gap-1 text-xs text-violet-400/60 hover:text-violet-400">
-                <Plus className="h-3 w-3" /> Add con
+              >
+                <X className="h-3.5 w-3.5" />
               </button>
-            )}
-          </div>
+            </div>
+          ))}
+          {pros.length < 5 && (
+            <button type="button" onClick={() => addItem(pros, setPros)} className="flex items-center gap-1 text-xs text-violet-400/60 hover:text-violet-400">
+              <Plus className="h-3 w-3" /> Add pro
+            </button>
+          )}
         </div>
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">What matters most to you</label>
+        <label className="block text-[11px] font-medium uppercase tracking-widest text-white/35">Cons</label>
+        <div className="space-y-2" style={{ transform: "translateZ(0)" }}>
+          {cons.map((c, i) => (
+            <div key={i} className="relative">
+              <input
+                value={c}
+                onChange={(e) => updateItem(cons, setCons, i, e.target.value)}
+                placeholder={`Con ${i + 1}`}
+                className={cn(inputCls, "pr-9")}
+              />
+              <button
+                type="button"
+                onClick={() => removeItem(cons, setCons, i)}
+                className={cn(
+                  "absolute inset-y-0 right-0 flex items-center pr-3",
+                  cons.length > 1 ? "text-white/20 hover:text-white/50" : "pointer-events-none opacity-0"
+                )}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+          {cons.length < 5 && (
+            <button type="button" onClick={() => addItem(cons, setCons)} className="flex items-center gap-1 text-xs text-violet-400/60 hover:text-violet-400">
+              <Plus className="h-3 w-3" /> Add con
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <label className="block text-[11px] font-medium uppercase tracking-widest text-white/35">What matters most to you</label>
         <input
           value={priorities}
           onChange={(e) => setPriorities(e.target.value)}
@@ -740,7 +736,7 @@ export function AIHubClient() {
   ]
 
   return (
-    <PageTransition className="min-h-full p-4 lg:p-8">
+    <div className="min-h-full p-4 lg:p-8">
       <div className="mb-8 flex items-center gap-3">
         <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-600/20">
           <Sparkles className="h-4 w-4 text-violet-400" />
@@ -774,6 +770,6 @@ export function AIHubClient() {
         {tab === "study" && <StudyPlanner />}
         {tab === "coach" && <CoachChat />}
       </div>
-    </PageTransition>
+    </div>
   )
 }
