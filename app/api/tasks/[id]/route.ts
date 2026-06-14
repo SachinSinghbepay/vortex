@@ -23,6 +23,9 @@ export async function PATCH(
       ...(body.dueDate !== undefined && {
         dueDate: body.dueDate ? new Date(body.dueDate) : null,
       }),
+      ...(body.recurrenceEndDate !== undefined && {
+        recurrenceEndDate: body.recurrenceEndDate ? new Date(body.recurrenceEndDate) : null,
+      }),
     },
   })
 
