@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { toast } from "sonner"
-import { Plus, CheckCircle2, Circle, Trash2, Calendar, Sparkles } from "lucide-react"
+import { Plus, CheckCircle2, Circle, Trash2, Calendar, Sparkles, Repeat } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Modal } from "@/components/ui/modal"
 import { BreakdownModal } from "@/components/ai/breakdown-modal"
@@ -19,6 +19,9 @@ interface Task {
   dueDate: string | null
   priority: Priority
   category: string | null
+  recurrence: string
+  recurrenceEndDate: string | null
+  updatedAt: string
   goal?: { id: string; title: string } | null
   createdAt: string
 }
@@ -38,6 +41,17 @@ const inputCls =
 const selectCls =
   "w-full rounded-lg border border-white/[0.07] bg-[#1a1a1a] px-3.5 py-2.5 text-sm text-white outline-none"
 
+const emptyForm = {
+  title: "",
+  priority: "MEDIUM" as Priority,
+  dueDate: "",
+  recurrence: "NONE" as "NONE" | "DAILY",
+  startDate: "",
+  recurrenceEndDate: "",
+  category: "",
+  goalId: "",
+}
+
 interface Props {
   initialTasks: Task[]
   goals: Array<{ id: string; title: string }>
@@ -49,13 +63,7 @@ export function TasksClient({ initialTasks, goals }: Props) {
   const [showCreate, setShowCreate] = useState(false)
   const [creating, setCreating] = useState(false)
   const [breakdownTask, setBreakdownTask] = useState<Task | null>(null)
-  const [form, setForm] = useState({
-    title: "",
-    priority: "MEDIUM" as Priority,
-    dueDate: "",
-    category: "",
-    goalId: "",
-  })
+  const [form, setForm] = useState(emptyForm)
 
   const now = new Date()
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
@@ -68,10 +76,25 @@ export function TasksClient({ initialTasks, goals }: Props) {
   const nextWeekEnd = new Date(thisWeekEnd)
   nextWeekEnd.setDate(nextWeekEnd.getDate() + 7)
 
+  // For recurring tasks: "done" only if completed=true AND updated today
+  const effectiveCompleted = (t: Task) => {
+    if (t.recurrence !== "DAILY") return t.completed
+    return t.completed && new Date(t.updatedAt) >= todayStart
+  }
+
+  // Is today within this recurring task's active range?
+  const isInRange = (t: Task) => {
+    if (t.recurrence !== "DAILY") return false
+    const start = t.startDate ? new Date(t.startDate) : new Date(t.createdAt)
+    const end = t.recurrenceEndDate ? new Date(t.recurrenceEndDate) : null
+    return start <= todayEnd && (end === null || end >= todayStart)
+  }
+
   const getTaskDate = (t: Task) =>
     t.startDate ? new Date(t.startDate) : t.dueDate ? new Date(t.dueDate) : null
 
   const getGroup = (t: Task): string => {
+    if (t.recurrence === "DAILY") return "Today"
     const d = getTaskDate(t)
     if (!d) return "No Date"
     if (d < todayStart) return "Overdue"
@@ -82,15 +105,14 @@ export function TasksClient({ initialTasks, goals }: Props) {
     return d.toLocaleDateString("en-US", { month: "long", year: "numeric" })
   }
 
-  const groupTasks = (tasks: Task[]) => {
+  const groupTasks = (list: Task[]) => {
     const order = ["Overdue", "Today", "Tomorrow", "This Week", "Next Week"]
     const map = new Map<string, Task[]>()
-    for (const t of tasks) {
+    for (const t of list) {
       const g = getGroup(t)
       if (!map.has(g)) map.set(g, [])
       map.get(g)!.push(t)
     }
-    // Sort groups: known order first, then chronological for month groups
     return Array.from(map.entries()).sort(([a], [b]) => {
       const ai = order.indexOf(a), bi = order.indexOf(b)
       if (ai !== -1 && bi !== -1) return ai - bi
@@ -100,10 +122,8 @@ export function TasksClient({ initialTasks, goals }: Props) {
     })
   }
 
-  // A task is "active today" if:
-  // 1. Single dueDate that falls today (original behaviour)
-  // 2. Has a startDate–dueDate range that includes today (AI-generated weekly tasks)
   const isActiveToday = (t: Task) => {
+    if (t.recurrence === "DAILY") return isInRange(t) && !effectiveCompleted(t)
     if (t.completed) return false
     if (t.startDate && t.dueDate) {
       const s = new Date(t.startDate)
@@ -118,21 +138,31 @@ export function TasksClient({ initialTasks, goals }: Props) {
   }
 
   const filtered = tasks.filter((t) => {
-    if (filter === "COMPLETED") return t.completed
-    if (filter === "PENDING") return !t.completed
+    if (filter === "COMPLETED") return effectiveCompleted(t)
+    if (filter === "PENDING") {
+      if (t.recurrence === "DAILY") return isInRange(t) && !effectiveCompleted(t)
+      return !t.completed
+    }
     if (filter === "TODAY") return isActiveToday(t)
+    // ALL: show recurring tasks only if in range
+    if (t.recurrence === "DAILY") return isInRange(t)
     return true
   })
 
   const filterCount = (f: (typeof filters)[number]) => {
-    if (f === "ALL") return tasks.length
-    if (f === "COMPLETED") return tasks.filter((t) => t.completed).length
-    if (f === "PENDING") return tasks.filter((t) => !t.completed).length
+    if (f === "ALL") return tasks.filter(t => t.recurrence === "DAILY" ? isInRange(t) : true).length
+    if (f === "COMPLETED") return tasks.filter(effectiveCompleted).length
+    if (f === "PENDING") return tasks.filter(t => {
+      if (t.recurrence === "DAILY") return isInRange(t) && !effectiveCompleted(t)
+      return !t.completed
+    }).length
     return tasks.filter(isActiveToday).length
   }
 
   const handleToggle = async (id: string, completed: boolean) => {
-    setTasks((p) => p.map((t) => (t.id === id ? { ...t, completed } : t)))
+    setTasks((p) => p.map((t) =>
+      t.id === id ? { ...t, completed, updatedAt: new Date().toISOString() } : t
+    ))
     await fetch(`/api/tasks/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -155,17 +185,26 @@ export function TasksClient({ initialTasks, goals }: Props) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...form,
-          goalId: form.goalId || null,
+          title: form.title,
+          priority: form.priority,
           category: form.category || null,
-          dueDate: form.dueDate || null,
+          goalId: form.goalId || null,
+          recurrence: form.recurrence,
+          ...(form.recurrence === "NONE"
+            ? { dueDate: form.dueDate || null }
+            : {
+                startDate: form.startDate || new Date().toISOString().split("T")[0],
+                dueDate: null,
+                recurrenceEndDate: form.recurrenceEndDate || null,
+              }
+          ),
         }),
       })
       if (res.ok) {
         const task = await res.json()
         setTasks((p) => [task, ...p])
         setShowCreate(false)
-        setForm({ title: "", priority: "MEDIUM", dueDate: "", category: "", goalId: "" })
+        setForm(emptyForm)
         toast.success("Task added")
       } else {
         toast.error("Failed to add task")
@@ -182,7 +221,7 @@ export function TasksClient({ initialTasks, goals }: Props) {
         <div>
           <h1 className="text-xl font-semibold text-white">Tasks</h1>
           <p className="mt-0.5 text-sm text-white/40">
-            {tasks.filter((t) => !t.completed).length} remaining
+            {tasks.filter((t) => !effectiveCompleted(t) && (t.recurrence === "DAILY" ? isInRange(t) : true)).length} remaining
           </p>
         </div>
         <Button onClick={() => setShowCreate(true)} className="gap-1.5 bg-violet-600 text-white hover:bg-violet-500">
@@ -229,7 +268,6 @@ export function TasksClient({ initialTasks, goals }: Props) {
           <div>
             {groupTasks(filtered).map(([groupLabel, groupItems]) => (
               <div key={groupLabel}>
-                {/* Group divider */}
                 <div className={cn(
                   "flex items-center gap-2 px-4 py-2 text-[11px] font-semibold uppercase tracking-widest",
                   groupLabel === "Overdue" ? "text-red-400/70" : "text-white/25"
@@ -239,72 +277,80 @@ export function TasksClient({ initialTasks, goals }: Props) {
                   <span className="text-white/15 font-normal normal-case tracking-normal">{groupItems.length}</span>
                 </div>
                 <ul className="divide-y divide-white/[0.04]">
-                  {groupItems.map((task) => (
-              <li
-                key={task.id}
-                className="group flex items-center gap-3 px-4 py-3.5 transition hover:bg-white/[0.02]"
-              >
-                <button
-                  onClick={() => handleToggle(task.id, !task.completed)}
-                  className="flex-shrink-0 text-white/25 transition hover:text-violet-400"
-                >
-                  {task.completed ? (
-                    <CheckCircle2 className="h-4 w-4 text-violet-400" />
-                  ) : (
-                    <Circle className="h-4 w-4" />
-                  )}
-                </button>
+                  {groupItems.map((task) => {
+                    const done = effectiveCompleted(task)
+                    return (
+                      <li
+                        key={task.id}
+                        className="group flex items-center gap-3 px-4 py-3.5 transition hover:bg-white/[0.02]"
+                      >
+                        <button
+                          onClick={() => handleToggle(task.id, !done)}
+                          className="flex-shrink-0 text-white/25 transition hover:text-violet-400"
+                        >
+                          {done ? (
+                            <CheckCircle2 className="h-4 w-4 text-violet-400" />
+                          ) : (
+                            <Circle className="h-4 w-4" />
+                          )}
+                        </button>
 
-                <div className={cn("h-1.5 w-1.5 flex-shrink-0 rounded-full", priorityDot[task.priority])} />
+                        <div className={cn("h-1.5 w-1.5 flex-shrink-0 rounded-full", priorityDot[task.priority])} />
 
-                <span
-                  className={cn(
-                    "flex-1 truncate text-sm",
-                    task.completed ? "text-white/25 line-through" : "text-white/75"
-                  )}
-                >
-                  {task.title}
-                </span>
+                        <span className={cn(
+                          "flex-1 truncate text-sm",
+                          done ? "text-white/25 line-through" : "text-white/75"
+                        )}>
+                          {task.title}
+                        </span>
 
-                {task.category && (
-                  <span className="flex-shrink-0 rounded-md bg-white/5 px-2 py-0.5 text-[10px] text-white/30">
-                    {task.category}
-                  </span>
-                )}
+                        {task.category && (
+                          <span className="flex-shrink-0 rounded-md bg-white/5 px-2 py-0.5 text-[10px] text-white/30">
+                            {task.category}
+                          </span>
+                        )}
 
-                {(task.dueDate || task.startDate) && (
-                  <div className="flex flex-shrink-0 items-center gap-1 text-xs text-white/25">
-                    <Calendar className="h-3 w-3" />
-                    {task.startDate && task.dueDate
-                      ? `${new Date(task.startDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${new Date(task.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
-                      : new Date(task.dueDate!).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                  </div>
-                )}
+                        {task.recurrence === "DAILY" ? (
+                          <div className="flex flex-shrink-0 items-center gap-1 text-xs text-violet-400/50">
+                            <Repeat className="h-3 w-3" />
+                            {task.recurrenceEndDate
+                              ? `until ${new Date(task.recurrenceEndDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                              : "every day"}
+                          </div>
+                        ) : (task.dueDate || task.startDate) ? (
+                          <div className="flex flex-shrink-0 items-center gap-1 text-xs text-white/25">
+                            <Calendar className="h-3 w-3" />
+                            {task.startDate && task.dueDate
+                              ? `${new Date(task.startDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${new Date(task.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                              : new Date(task.dueDate!).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                          </div>
+                        ) : null}
 
-                {task.goal && (
-                  <span className="flex-shrink-0 rounded-md bg-violet-500/10 px-2 py-0.5 text-[10px] text-violet-400">
-                    {task.goal.title}
-                  </span>
-                )}
+                        {task.goal && (
+                          <span className="flex-shrink-0 rounded-md bg-violet-500/10 px-2 py-0.5 text-[10px] text-violet-400">
+                            {task.goal.title}
+                          </span>
+                        )}
 
-                {!task.completed && (
-                  <button
-                    onClick={() => setBreakdownTask(task)}
-                    className="shrink-0 text-white/0 transition group-hover:text-violet-400/50 hover:!text-violet-400"
-                    title="Break down with AI"
-                  >
-                    <Sparkles className="h-3.5 w-3.5" />
-                  </button>
-                )}
+                        {!done && (
+                          <button
+                            onClick={() => setBreakdownTask(task)}
+                            className="shrink-0 text-white/0 transition group-hover:text-violet-400/50 hover:!text-violet-400"
+                            title="Break down with AI"
+                          >
+                            <Sparkles className="h-3.5 w-3.5" />
+                          </button>
+                        )}
 
-                <button
-                  onClick={() => handleDelete(task.id)}
-                  className="shrink-0 text-white/0 transition group-hover:text-white/20 hover:!text-red-400"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </li>
-                  ))}
+                        <button
+                          onClick={() => handleDelete(task.id)}
+                          className="shrink-0 text-white/0 transition group-hover:text-white/20 hover:!text-red-400"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </li>
+                    )
+                  })}
                 </ul>
               </div>
             ))}
@@ -312,8 +358,8 @@ export function TasksClient({ initialTasks, goals }: Props) {
         )}
       </div>
 
-      {/* Modal */}
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="New Task">
+      {/* Create modal */}
+      <Modal open={showCreate} onClose={() => { setShowCreate(false); setForm(emptyForm) }} title="New Task">
         <div className="space-y-4">
           <div className="space-y-1.5">
             <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Title</label>
@@ -325,6 +371,7 @@ export function TasksClient({ initialTasks, goals }: Props) {
               className={inputCls}
             />
           </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Priority</label>
@@ -336,6 +383,16 @@ export function TasksClient({ initialTasks, goals }: Props) {
               </select>
             </div>
             <div className="space-y-1.5">
+              <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Repeat</label>
+              <select value={form.recurrence} onChange={(e) => setForm({ ...form, recurrence: e.target.value as "NONE" | "DAILY" })} className={selectCls}>
+                <option value="NONE">None</option>
+                <option value="DAILY">Every day</option>
+              </select>
+            </div>
+          </div>
+
+          {form.recurrence === "NONE" ? (
+            <div className="space-y-1.5">
               <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Due Date</label>
               <input
                 type="date"
@@ -344,7 +401,31 @@ export function TasksClient({ initialTasks, goals }: Props) {
                 className={cn(inputCls, "[color-scheme:dark]")}
               />
             </div>
-          </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Start Date</label>
+                <input
+                  type="date"
+                  value={form.startDate}
+                  onChange={(e) => setForm({ ...form, startDate: e.target.value })}
+                  className={cn(inputCls, "[color-scheme:dark]")}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">
+                  End Date <span className="normal-case text-white/20">(optional)</span>
+                </label>
+                <input
+                  type="date"
+                  value={form.recurrenceEndDate}
+                  onChange={(e) => setForm({ ...form, recurrenceEndDate: e.target.value })}
+                  className={cn(inputCls, "[color-scheme:dark]")}
+                />
+              </div>
+            </div>
+          )}
+
           <div className="space-y-1.5">
             <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Category</label>
             <input
@@ -354,6 +435,7 @@ export function TasksClient({ initialTasks, goals }: Props) {
               className={inputCls}
             />
           </div>
+
           {goals.length > 0 && (
             <div className="space-y-1.5">
               <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Link to Goal</label>
@@ -365,6 +447,7 @@ export function TasksClient({ initialTasks, goals }: Props) {
               </select>
             </div>
           )}
+
           <Button
             onClick={handleCreate}
             disabled={!form.title.trim() || creating}

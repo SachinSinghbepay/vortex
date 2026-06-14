@@ -84,15 +84,17 @@ model Goal {
 }
 
 model Task {
-  id        String    @id @default(cuid())
-  title     String
-  completed Boolean   @default(false)
-  startDate DateTime?
-  dueDate   DateTime?
-  priority  Priority  @default(MEDIUM)
-  category  String?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id                String    @id @default(cuid())
+  title             String
+  completed         Boolean   @default(false)
+  startDate         DateTime?
+  dueDate           DateTime?
+  priority          Priority  @default(MEDIUM)
+  category          String?
+  recurrence        String    @default("NONE")
+  recurrenceEndDate DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
