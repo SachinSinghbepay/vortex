@@ -14,11 +14,11 @@ export default async function TasksPage() {
 
   const serialized = tasks.map(({ startDate, dueDate, recurrenceEndDate, createdAt, updatedAt, ...rest }) => ({
     ...rest,
-    startDate: startDate?.toISOString() ?? null,
-    dueDate: dueDate?.toISOString() ?? null,
-    recurrenceEndDate: recurrenceEndDate?.toISOString() ?? null,
-    createdAt: createdAt.toISOString(),
-    updatedAt: updatedAt.toISOString(),
+    startDate: startDate ? new Date(startDate).toISOString() : null,
+    dueDate: dueDate ? new Date(dueDate).toISOString() : null,
+    recurrenceEndDate: recurrenceEndDate ? new Date(recurrenceEndDate).toISOString() : null,
+    createdAt: new Date(createdAt).toISOString(),
+    updatedAt: new Date(updatedAt).toISOString(),
   }))
 
   return <TasksClient initialTasks={serialized} goals={goals} />
