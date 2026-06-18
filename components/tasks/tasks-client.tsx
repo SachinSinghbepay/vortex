@@ -151,7 +151,7 @@ export function TasksClient({ initialTasks, goals }: Props) {
 
   // ── Grouping ────────────────────────────────────────────────────────────────
 
-  const getGroups = (t: Task, expandRecurring: boolean): string[] => {
+  const getGroups = (t: Task): string[] => {
     // Non-recurring completed before today → dated "Completed" section
     if (t.recurrence !== "DAILY" && t.completed) {
       const completedDate = new Date(t.updatedAt)
@@ -171,36 +171,24 @@ export function TasksClient({ initialTasks, goals }: Props) {
       return [d.toLocaleDateString("en-US", { month: "long", year: "numeric" })]
     }
 
+    // Recurring: single primary section — earliest one the task is active in
     const start = t.startDate ? new Date(t.startDate) : new Date(t.createdAt)
     const end = t.recurrenceEndDate ? new Date(t.recurrenceEndDate) : null
-
-    if (!expandRecurring) {
-      if (start >= todayEnd) {
-        if (start < tomorrowEnd) return ["Tomorrow"]
-        if (start < thisWeekEnd) return ["This Week"]
-        if (start < nextWeekEnd) return ["Next Week"]
-        return [start.toLocaleDateString("en-US", { month: "long", year: "numeric" })]
-      }
-      return ["Today"]
-    }
-
     const activeIn = (sectionStart: Date, sectionEnd: Date) =>
       start < sectionEnd && (end === null || end >= sectionStart)
 
-    const groups: string[] = []
-    if (activeIn(todayStart, todayEnd)) groups.push("Today")
-    if (activeIn(todayEnd, tomorrowEnd)) groups.push("Tomorrow")
-    if (activeIn(tomorrowEnd, thisWeekEnd)) groups.push("This Week")
-    if (activeIn(thisWeekEnd, nextWeekEnd)) groups.push("Next Week")
-
-    return groups.length > 0 ? groups : ["Today"]
+    if (activeIn(todayStart, todayEnd)) return ["Today"]
+    if (activeIn(todayEnd, tomorrowEnd)) return ["Tomorrow"]
+    if (activeIn(tomorrowEnd, thisWeekEnd)) return ["This Week"]
+    if (activeIn(thisWeekEnd, nextWeekEnd)) return ["Next Week"]
+    return [start.toLocaleDateString("en-US", { month: "long", year: "numeric" })]
   }
 
-  const groupTasks = (list: Task[], expandRecurring: boolean): [string, TaskEntry[]][] => {
+  const groupTasks = (list: Task[]): [string, TaskEntry[]][] => {
     const order = ["Overdue", "Today", "Tomorrow", "This Week", "Next Week"]
     const map = new Map<string, TaskEntry[]>()
     for (const t of list) {
-      for (const g of getGroups(t, expandRecurring)) {
+      for (const g of getGroups(t)) {
         if (!map.has(g)) map.set(g, [])
         map.get(g)!.push({ ...t, _group: g })
       }
@@ -234,8 +222,6 @@ export function TasksClient({ initialTasks, goals }: Props) {
   // ── Filtering ───────────────────────────────────────────────────────────────
 
   // TODAY bypasses date range; ALL/PENDING/COMPLETED respect it
-  const shouldExpand = filter === "ALL" || filter === "PENDING"
-
   const filtered = tasks.filter((t) => {
     if (filter === "TODAY") return isActiveToday(t)
     if (!isInDateRange(t)) return false
@@ -478,7 +464,7 @@ export function TasksClient({ initialTasks, goals }: Props) {
           </div>
         ) : (
           <div>
-            {groupTasks(filtered, shouldExpand).map(([groupLabel, groupItems]) => {
+            {groupTasks(filtered).map(([groupLabel, groupItems]) => {
               const isCompletedGroup = groupLabel.startsWith("Completed ")
               const isOverdue = groupLabel === "Overdue"
               return (
