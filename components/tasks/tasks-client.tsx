@@ -75,9 +75,34 @@ export function TasksClient({ initialTasks, goals }: Props) {
   const nextWeekEnd = new Date(thisWeekEnd)
   nextWeekEnd.setDate(nextWeekEnd.getDate() + 7)
 
-  // Date range — default to current month through 3 months ahead so future recurring tasks are visible
-  const initRangeStart = new Date(now.getFullYear(), now.getMonth(), 1)
-  const initRangeEnd = new Date(now.getFullYear(), now.getMonth() + 4, 0, 23, 59, 59)
+  // Date range — default to current month, persisted in localStorage
+  const defaultRangeStart = new Date(now.getFullYear(), now.getMonth(), 1)
+  const defaultRangeEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59)
+
+  const getSavedRange = (): { start: Date; end: Date } | null => {
+    if (typeof window === "undefined") return null
+    try {
+      const saved = localStorage.getItem("cortex-tasks-range")
+      if (!saved) return null
+      const { start, end } = JSON.parse(saved)
+      return { start: new Date(start + "T00:00:00"), end: new Date(end + "T23:59:59") }
+    } catch {
+      return null
+    }
+  }
+
+  const saveRange = (s: Date, e: Date) => {
+    try {
+      localStorage.setItem("cortex-tasks-range", JSON.stringify({
+        start: formatDateForInput(s),
+        end: formatDateForInput(e),
+      }))
+    } catch { /* empty */ }
+  }
+
+  const saved = getSavedRange()
+  const initRangeStart = saved?.start ?? defaultRangeStart
+  const initRangeEnd = saved?.end ?? defaultRangeEnd
 
   const [tasks, setTasks] = useState(initialTasks)
   const [filter, setFilter] = useState<(typeof filters)[number]>("ALL")
@@ -85,7 +110,7 @@ export function TasksClient({ initialTasks, goals }: Props) {
   const [rangeEnd, setRangeEnd] = useState(initRangeEnd)
   const [showRangePicker, setShowRangePicker] = useState(false)
   const [pickerStart, setPickerStart] = useState(formatDateForInput(initRangeStart))
-  const [pickerEnd, setPickerEnd] = useState(formatDateForInput(new Date(now.getFullYear(), now.getMonth() + 4, 0)))
+  const [pickerEnd, setPickerEnd] = useState(formatDateForInput(initRangeEnd))
   const [showCreate, setShowCreate] = useState(false)
   const [creating, setCreating] = useState(false)
   const [breakdownTask, setBreakdownTask] = useState<Task | null>(null)
@@ -116,13 +141,17 @@ export function TasksClient({ initialTasks, goals }: Props) {
     setPickerStart(formatDateForInput(s))
     setPickerEnd(formatDateForInput(new Date(now.getFullYear(), now.getMonth() + offset + 1, 0)))
     setShowRangePicker(false)
+    saveRange(s, e)
   }
 
   const applyCustomRange = () => {
     if (!pickerStart || !pickerEnd) return
-    setRangeStart(new Date(pickerStart + "T00:00:00"))
-    setRangeEnd(new Date(pickerEnd + "T23:59:59"))
+    const s = new Date(pickerStart + "T00:00:00")
+    const e = new Date(pickerEnd + "T23:59:59")
+    setRangeStart(s)
+    setRangeEnd(e)
     setShowRangePicker(false)
+    saveRange(s, e)
   }
 
   // A task is "in the selected date range" (for ALL/PENDING/COMPLETED)
