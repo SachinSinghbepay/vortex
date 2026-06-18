@@ -74,9 +74,9 @@ export function TasksClient({ initialTasks, goals }: Props) {
   const nextWeekEnd = new Date(thisWeekEnd)
   nextWeekEnd.setDate(nextWeekEnd.getDate() + 7)
 
-  // Date range — default to current month
+  // Date range — default to current month through 3 months ahead so future recurring tasks are visible
   const initRangeStart = new Date(now.getFullYear(), now.getMonth(), 1)
-  const initRangeEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59)
+  const initRangeEnd = new Date(now.getFullYear(), now.getMonth() + 4, 0, 23, 59, 59)
 
   const [tasks, setTasks] = useState(initialTasks)
   const [filter, setFilter] = useState<(typeof filters)[number]>("ALL")
@@ -84,7 +84,7 @@ export function TasksClient({ initialTasks, goals }: Props) {
   const [rangeEnd, setRangeEnd] = useState(initRangeEnd)
   const [showRangePicker, setShowRangePicker] = useState(false)
   const [pickerStart, setPickerStart] = useState(formatDateForInput(initRangeStart))
-  const [pickerEnd, setPickerEnd] = useState(formatDateForInput(new Date(now.getFullYear(), now.getMonth() + 1, 0)))
+  const [pickerEnd, setPickerEnd] = useState(formatDateForInput(new Date(now.getFullYear(), now.getMonth() + 4, 0)))
   const [showCreate, setShowCreate] = useState(false)
   const [creating, setCreating] = useState(false)
   const [breakdownTask, setBreakdownTask] = useState<Task | null>(null)
@@ -174,17 +174,36 @@ export function TasksClient({ initialTasks, goals }: Props) {
       return [d.toLocaleDateString("en-US", { month: "long", year: "numeric" })]
     }
 
-    // Recurring: single primary section — earliest one the task is active in
+    // Recurring: show in every near-future section it's active in
+    // (active today → Today only; future start → each applicable upcoming section)
     const start = t.startDate ? new Date(t.startDate) : new Date(t.createdAt)
     const end = t.recurrenceEndDate ? new Date(t.recurrenceEndDate) : null
     const activeIn = (sectionStart: Date, sectionEnd: Date) =>
       start < sectionEnd && (end === null || end >= sectionStart)
 
+    // If already active today, only show in Today — no need to repeat in every future section
     if (activeIn(todayStart, todayEnd)) return ["Today"]
-    if (activeIn(todayEnd, tomorrowEnd)) return ["Tomorrow"]
-    if (activeIn(tomorrowEnd, thisWeekEnd)) return ["This Week"]
-    if (activeIn(thisWeekEnd, nextWeekEnd)) return ["Next Week"]
-    return [start.toLocaleDateString("en-US", { month: "long", year: "numeric" })]
+
+    // Future start: show in each upcoming section it covers
+    const groups: string[] = []
+    if (activeIn(todayEnd, tomorrowEnd)) groups.push("Tomorrow")
+    if (activeIn(tomorrowEnd, thisWeekEnd)) groups.push("This Week")
+    if (activeIn(thisWeekEnd, nextWeekEnd)) groups.push("Next Week")
+
+    // Beyond next week: group by month
+    const monthStart = new Date(nextWeekEnd.getFullYear(), nextWeekEnd.getMonth(), 1)
+    const sixMonthsOut = new Date(now.getFullYear(), now.getMonth() + 6, 1)
+    let cursor = new Date(monthStart)
+    while (cursor <= sixMonthsOut) {
+      const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1)
+      if (activeIn(cursor, monthEnd)) {
+        const label = cursor.toLocaleDateString("en-US", { month: "long", year: "numeric" })
+        if (!groups.includes(label)) groups.push(label)
+      }
+      cursor = monthEnd
+    }
+
+    return groups.length > 0 ? groups : [start.toLocaleDateString("en-US", { month: "long", year: "numeric" })]
   }
 
   const groupTasks = (list: Task[]): [string, TaskEntry[]][] => {
