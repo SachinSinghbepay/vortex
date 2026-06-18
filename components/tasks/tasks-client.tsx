@@ -528,7 +528,7 @@ export function TasksClient({ initialTasks, goals }: Props) {
                   <div
                     className={cn(
                       "flex items-center gap-2 px-4 py-2 text-[11px] font-semibold uppercase tracking-widest",
-                      isOverdue ? "text-red-400/70" : isCompletedGroup ? "text-white/20" : "text-white/25"
+                      isOverdue ? "text-red-400/70" : isCompletedGroup ? "text-white/40" : "text-white/25"
                     )}
                   >
                     {isOverdue && <span className="text-red-400">!</span>}
@@ -548,7 +548,7 @@ export function TasksClient({ initialTasks, goals }: Props) {
                       return (
                         <li
                           key={`${task.id}-${task._group}`}
-                          className="group flex items-center gap-3 px-4 py-3.5 transition hover:bg-white/2"
+                          className="flex items-center gap-3 px-4 py-3.5 transition hover:bg-white/2"
                         >
                           <button
                             onClick={() => handleToggle(task.id, !done)}
@@ -606,7 +606,7 @@ export function TasksClient({ initialTasks, goals }: Props) {
                           {!done && (
                             <button
                               onClick={() => setBreakdownTask(task)}
-                              className="shrink-0 text-white/0 transition group-hover:text-violet-400/50 hover:text-violet-400!"
+                              className="shrink-0 text-white/40 transition hover:text-violet-400"
                               title="Break down with AI"
                             >
                               <Sparkles className="h-3.5 w-3.5" />
@@ -615,7 +615,7 @@ export function TasksClient({ initialTasks, goals }: Props) {
 
                           <button
                             onClick={() => openEdit(task)}
-                            className="shrink-0 text-white/0 transition group-hover:text-white/20 hover:text-white/60!"
+                            className="shrink-0 text-white/40 transition hover:text-white/70"
                             title="Edit task"
                           >
                             <Pencil className="h-3.5 w-3.5" />
@@ -623,7 +623,7 @@ export function TasksClient({ initialTasks, goals }: Props) {
 
                           <button
                             onClick={() => setDeleteTarget(task)}
-                            className="shrink-0 text-white/0 transition group-hover:text-white/20 hover:text-red-400!"
+                            className="shrink-0 text-white/40 transition hover:text-red-400"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
@@ -767,7 +767,7 @@ export function TasksClient({ initialTasks, goals }: Props) {
               </div>
               <div className="space-y-1.5">
                 <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">
-                  End Date <span className="normal-case text-white/20">(optional)</span>
+                  End Date <span className="normal-case text-white/40">(optional)</span>
                 </label>
                 <input
                   type="date"
@@ -879,7 +879,7 @@ export function TasksClient({ initialTasks, goals }: Props) {
               </div>
               <div className="space-y-1.5">
                 <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">
-                  End Date <span className="normal-case text-white/20">(optional)</span>
+                  End Date <span className="normal-case text-white/40">(optional)</span>
                 </label>
                 <input
                   type="date"
