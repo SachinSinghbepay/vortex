@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { toast } from "sonner"
-import { Plus, CheckCircle2, Circle, Trash2, Calendar, Sparkles, Repeat, ChevronDown } from "lucide-react"
+import { Plus, CheckCircle2, Circle, Trash2, Calendar, Sparkles, Repeat, ChevronDown, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Modal } from "@/components/ui/modal"
 import { BreakdownModal } from "@/components/ai/breakdown-modal"
@@ -89,7 +89,10 @@ export function TasksClient({ initialTasks, goals }: Props) {
   const [creating, setCreating] = useState(false)
   const [breakdownTask, setBreakdownTask] = useState<Task | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Task | null>(null)
+  const [editTarget, setEditTarget] = useState<Task | null>(null)
+  const [saving, setSaving] = useState(false)
   const [form, setForm] = useState(emptyForm)
+  const [editForm, setEditForm] = useState(emptyForm)
 
   // ── Date range helpers ──────────────────────────────────────────────────────
 
@@ -283,6 +286,59 @@ export function TasksClient({ initialTasks, goals }: Props) {
       body: JSON.stringify({ recurrenceEndDate: endDate }),
     })
     toast("Task will stop repeating after today")
+  }
+
+  const openEdit = (task: Task) => {
+    setEditForm({
+      title: task.title,
+      priority: task.priority,
+      recurrence: task.recurrence as "NONE" | "DAILY",
+      startDate: task.startDate ? task.startDate.split("T")[0] : "",
+      dueDate: task.dueDate ? task.dueDate.split("T")[0] : "",
+      recurrenceEndDate: task.recurrenceEndDate ? task.recurrenceEndDate.split("T")[0] : "",
+      category: task.category ?? "",
+      goalId: task.goal?.id ?? "",
+    })
+    setEditTarget(task)
+  }
+
+  const handleEdit = async () => {
+    if (!editTarget || !editForm.title.trim()) return
+    setSaving(true)
+    try {
+      const body = {
+        title: editForm.title.trim(),
+        priority: editForm.priority,
+        category: editForm.category || null,
+        goalId: editForm.goalId || null,
+        recurrence: editForm.recurrence,
+        ...(editForm.recurrence === "NONE"
+          ? { dueDate: editForm.dueDate || null, startDate: null, recurrenceEndDate: null }
+          : { startDate: editForm.startDate || null, dueDate: null, recurrenceEndDate: editForm.recurrenceEndDate || null }),
+      }
+      const res = await fetch(`/api/tasks/${editTarget.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      if (res.ok) {
+        setTasks((p) => p.map((t) =>
+          t.id === editTarget.id
+            ? {
+                ...t,
+                ...body,
+                goal: editForm.goalId ? (goals.find((g) => g.id === editForm.goalId) ?? t.goal) : null,
+              }
+            : t
+        ))
+        setEditTarget(null)
+        toast.success("Task updated")
+      } else {
+        toast.error("Failed to update task")
+      }
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleCreate = async () => {
@@ -558,6 +614,14 @@ export function TasksClient({ initialTasks, goals }: Props) {
                           )}
 
                           <button
+                            onClick={() => openEdit(task)}
+                            className="shrink-0 text-white/0 transition group-hover:text-white/20 hover:text-white/60!"
+                            title="Edit task"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+
+                          <button
                             onClick={() => setDeleteTarget(task)}
                             className="shrink-0 text-white/0 transition group-hover:text-white/20 hover:text-red-400!"
                           >
@@ -638,6 +702,117 @@ export function TasksClient({ initialTasks, goals }: Props) {
             )}
           </div>
         )}
+      </Modal>
+
+      {/* Edit modal */}
+      <Modal open={!!editTarget} onClose={() => setEditTarget(null)} title="Edit Task">
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Title</label>
+            <input
+              value={editForm.title}
+              onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+              onKeyDown={(e) => e.key === "Enter" && handleEdit()}
+              className={inputCls}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Priority</label>
+              <select
+                value={editForm.priority}
+                onChange={(e) => setEditForm({ ...editForm, priority: e.target.value as Priority })}
+                className={selectCls}
+              >
+                <option value="LOW">Low</option>
+                <option value="MEDIUM">Medium</option>
+                <option value="HIGH">High</option>
+                <option value="URGENT">Urgent</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Repeat</label>
+              <select
+                value={editForm.recurrence}
+                onChange={(e) => setEditForm({ ...editForm, recurrence: e.target.value as "NONE" | "DAILY" })}
+                className={selectCls}
+              >
+                <option value="NONE">None</option>
+                <option value="DAILY">Every day</option>
+              </select>
+            </div>
+          </div>
+
+          {editForm.recurrence === "NONE" ? (
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Due Date</label>
+              <input
+                type="date"
+                value={editForm.dueDate}
+                onChange={(e) => setEditForm({ ...editForm, dueDate: e.target.value })}
+                className={cn(inputCls, "scheme-dark")}
+              />
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Start Date</label>
+                <input
+                  type="date"
+                  value={editForm.startDate}
+                  onChange={(e) => setEditForm({ ...editForm, startDate: e.target.value })}
+                  className={cn(inputCls, "scheme-dark")}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">
+                  End Date <span className="normal-case text-white/20">(optional)</span>
+                </label>
+                <input
+                  type="date"
+                  value={editForm.recurrenceEndDate}
+                  onChange={(e) => setEditForm({ ...editForm, recurrenceEndDate: e.target.value })}
+                  className={cn(inputCls, "scheme-dark")}
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Category</label>
+            <input
+              value={editForm.category}
+              onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
+              placeholder="e.g. Work, Study..."
+              className={inputCls}
+            />
+          </div>
+
+          {goals.length > 0 && (
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Link to Goal</label>
+              <select
+                value={editForm.goalId}
+                onChange={(e) => setEditForm({ ...editForm, goalId: e.target.value })}
+                className={selectCls}
+              >
+                <option value="">None</option>
+                {goals.map((g) => (
+                  <option key={g.id} value={g.id}>{g.title}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <Button
+            onClick={handleEdit}
+            disabled={!editForm.title.trim() || saving}
+            className="w-full bg-violet-600 text-white hover:bg-violet-500"
+          >
+            {saving ? "Saving..." : "Save changes"}
+          </Button>
+        </div>
       </Modal>
 
       {/* Create modal */}

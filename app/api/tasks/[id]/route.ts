@@ -20,6 +20,12 @@ export async function PATCH(
       ...(body.completed !== undefined && { completed: body.completed }),
       ...(body.title !== undefined && { title: body.title }),
       ...(body.priority !== undefined && { priority: body.priority }),
+      ...(body.category !== undefined && { category: body.category || null }),
+      ...(body.goalId !== undefined && { goalId: body.goalId || null }),
+      ...(body.recurrence !== undefined && { recurrence: body.recurrence }),
+      ...(body.startDate !== undefined && {
+        startDate: body.startDate ? new Date(body.startDate) : null,
+      }),
       ...(body.dueDate !== undefined && {
         dueDate: body.dueDate ? new Date(body.dueDate) : null,
       }),
