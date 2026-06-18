@@ -21,6 +21,7 @@ interface Task {
   category: string | null
   recurrence: string
   recurrenceEndDate: string | null
+  skippedDates: string
   updatedAt: string
   goal?: { id: string; title: string } | null
   createdAt: string
@@ -89,6 +90,7 @@ export function TasksClient({ initialTasks, goals }: Props) {
   const [creating, setCreating] = useState(false)
   const [breakdownTask, setBreakdownTask] = useState<Task | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Task | null>(null)
+  const [deleteGroup, setDeleteGroup] = useState<string | null>(null)
   const [editTarget, setEditTarget] = useState<Task | null>(null)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState(emptyForm)
@@ -135,6 +137,32 @@ export function TasksClient({ initialTasks, goals }: Props) {
     return d >= rangeStart && d <= rangeEnd
   }
 
+  // ── Skip helpers ────────────────────────────────────────────────────────────
+
+  const getSectionDateRange = (group: string): { start: Date; end: Date } | null => {
+    if (group === "Today") return { start: todayStart, end: todayEnd }
+    if (group === "Tomorrow") return { start: todayEnd, end: tomorrowEnd }
+    if (group === "This Week") return { start: tomorrowEnd, end: thisWeekEnd }
+    if (group === "Next Week") return { start: thisWeekEnd, end: nextWeekEnd }
+    const d = new Date(group)
+    if (!isNaN(d.getTime()))
+      return { start: new Date(d.getFullYear(), d.getMonth(), 1), end: new Date(d.getFullYear(), d.getMonth() + 1, 1) }
+    return null
+  }
+
+  const isSectionSkipped = (t: Task, sectionStart: Date): boolean => {
+    try {
+      const skipped: { start: string; end: string }[] = JSON.parse(t.skippedDates || "[]")
+      return skipped.some((r) => {
+        const s = new Date(r.start + "T00:00:00")
+        const e = new Date(r.end + "T23:59:59")
+        return sectionStart >= s && sectionStart <= e
+      })
+    } catch {
+      return false
+    }
+  }
+
   // ── Task state helpers ──────────────────────────────────────────────────────
 
   const effectiveCompleted = (t: Task) => {
@@ -179,22 +207,25 @@ export function TasksClient({ initialTasks, goals }: Props) {
     const start = t.startDate ? new Date(t.startDate) : new Date(t.createdAt)
     const end = t.recurrenceEndDate ? new Date(t.recurrenceEndDate) : null
     const activeIn = (sectionStart: Date, sectionEnd: Date) =>
-      start < sectionEnd && (end === null || end >= sectionStart)
+      start < sectionEnd && (end === null || end >= sectionStart) && !isSectionSkipped(t, sectionStart)
 
-    // Show in every section the task is active in
+    // Show in every section the task is active in, but only if that section overlaps the date range
+    const inRange = (sectionStart: Date, sectionEnd: Date) =>
+      sectionEnd > rangeStart && sectionStart <= rangeEnd
+
     const groups: string[] = []
-    if (activeIn(todayStart, todayEnd)) groups.push("Today")
-    if (activeIn(todayEnd, tomorrowEnd)) groups.push("Tomorrow")
-    if (activeIn(tomorrowEnd, thisWeekEnd)) groups.push("This Week")
-    if (activeIn(thisWeekEnd, nextWeekEnd)) groups.push("Next Week")
+    if (activeIn(todayStart, todayEnd) && inRange(todayStart, todayEnd)) groups.push("Today")
+    if (activeIn(todayEnd, tomorrowEnd) && inRange(todayEnd, tomorrowEnd)) groups.push("Tomorrow")
+    if (activeIn(tomorrowEnd, thisWeekEnd) && inRange(tomorrowEnd, thisWeekEnd)) groups.push("This Week")
+    if (activeIn(thisWeekEnd, nextWeekEnd) && inRange(thisWeekEnd, nextWeekEnd)) groups.push("Next Week")
 
-    // Beyond next week: group by month
-    const monthStart = new Date(nextWeekEnd.getFullYear(), nextWeekEnd.getMonth(), 1)
-    const sixMonthsOut = new Date(now.getFullYear(), now.getMonth() + 6, 1)
-    let cursor = new Date(monthStart)
-    while (cursor <= sixMonthsOut) {
+    // Beyond next week: one entry per month the task is active in, within the range
+    const monthCursorStart = new Date(nextWeekEnd.getFullYear(), nextWeekEnd.getMonth(), 1)
+    const rangeEndMonth = new Date(rangeEnd.getFullYear(), rangeEnd.getMonth() + 1, 1)
+    let cursor = new Date(monthCursorStart)
+    while (cursor < rangeEndMonth) {
       const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1)
-      if (activeIn(cursor, monthEnd)) {
+      if (activeIn(cursor, monthEnd) && inRange(cursor, monthEnd)) {
         const label = cursor.toLocaleDateString("en-US", { month: "long", year: "numeric" })
         if (!groups.includes(label)) groups.push(label)
       }
@@ -221,12 +252,15 @@ export function TasksClient({ initialTasks, goals }: Props) {
       const aC = a.startsWith("Completed "), bC = b.startsWith("Completed ")
       if (aC && !bC) return 1
       if (!aC && bC) return -1
+      // Sort "Month Year" groups chronologically
+      const aTime = new Date(a).getTime(), bTime = new Date(b).getTime()
+      if (!isNaN(aTime) && !isNaN(bTime)) return aTime - bTime
       return a < b ? -1 : 1
     })
   }
 
   const isActiveToday = (t: Task) => {
-    if (t.recurrence === "DAILY") return isInRange(t) && !effectiveCompleted(t)
+    if (t.recurrence === "DAILY") return isInRange(t) && !effectiveCompleted(t) && !isSectionSkipped(t, todayStart)
     if (t.completed) return false
     if (t.startDate && t.dueDate) {
       const s = new Date(t.startDate), e = new Date(t.dueDate)
@@ -291,18 +325,54 @@ export function TasksClient({ initialTasks, goals }: Props) {
     toast("Task deleted")
   }
 
-  const handleStopRecurrence = async (id: string) => {
-    const endDate = todayStart.toISOString()
-    setTasks((p) => p.map((t) =>
-      t.id === id ? { ...t, recurrenceEndDate: endDate } : t
-    ))
+  const groupText = (g: string | null) =>
+    g === "Today" ? "today"
+    : g === "Tomorrow" ? "tomorrow"
+    : g === "This Week" ? "this week"
+    : g === "Next Week" ? "next week"
+    : g?.toLowerCase() ?? "this occurrence"
+
+  const handleSkipOccurrence = async (id: string) => {
+    const range = deleteGroup ? getSectionDateRange(deleteGroup) : null
+    if (!range) return
+    const task = tasks.find((t) => t.id === id)
+    if (!task) return
+
+    let existing: { start: string; end: string }[] = []
+    try { existing = JSON.parse(task.skippedDates || "[]") } catch { /* empty */ }
+
+    const entry = {
+      start: formatDateForInput(range.start),
+      // range.end is exclusive (start of next period), so subtract 1 day for inclusive end
+      end: formatDateForInput(new Date(range.end.getTime() - 86400000)),
+    }
+    const newSkipped = JSON.stringify([...existing, entry])
+
+    setTasks((p) => p.map((t) => t.id === id ? { ...t, skippedDates: newSkipped } : t))
     setDeleteTarget(null)
+    setDeleteGroup(null)
+    await fetch(`/api/tasks/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ skippedDates: newSkipped }),
+    })
+    toast(`Skipped ${groupText(deleteGroup)}`)
+  }
+
+  const handleStopAfter = async (id: string) => {
+    const range = deleteGroup ? getSectionDateRange(deleteGroup) : null
+    // range.end is exclusive — subtract 1ms to get last moment of this section
+    const endDate = range ? new Date(range.end.getTime() - 1).toISOString() : todayStart.toISOString()
+
+    setTasks((p) => p.map((t) => t.id === id ? { ...t, recurrenceEndDate: endDate } : t))
+    setDeleteTarget(null)
+    setDeleteGroup(null)
     await fetch(`/api/tasks/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ recurrenceEndDate: endDate }),
     })
-    toast("Task will stop repeating after today")
+    toast(`Task stops after ${groupText(deleteGroup)}`)
   }
 
   const openEdit = (task: Task) => {
@@ -639,7 +709,7 @@ export function TasksClient({ initialTasks, goals }: Props) {
                           </button>
 
                           <button
-                            onClick={() => setDeleteTarget(task)}
+                            onClick={() => { setDeleteTarget(task); setDeleteGroup(task._group) }}
                             className="shrink-0 text-white/40 transition hover:text-red-400"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
@@ -658,7 +728,7 @@ export function TasksClient({ initialTasks, goals }: Props) {
       {/* Delete dialog */}
       <Modal
         open={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
+        onClose={() => { setDeleteTarget(null); setDeleteGroup(null) }}
         title={deleteTarget?.recurrence === "DAILY" ? "Remove repeating task" : "Delete task"}
       >
         {deleteTarget && (
@@ -666,30 +736,37 @@ export function TasksClient({ initialTasks, goals }: Props) {
             {deleteTarget.recurrence === "DAILY" ? (
               <>
                 <p className="text-sm text-white/50">
-                  <span className="text-white/80">"{deleteTarget.title}"</span> repeats every day
-                  {deleteTarget.recurrenceEndDate
-                    ? ` until ${new Date(deleteTarget.recurrenceEndDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
-                    : ""}
-                  . What would you like to do?
+                  <span className="text-white/80">"{deleteTarget.title}"</span> repeats every day. What would you like to do?
                 </p>
                 <div className="space-y-2">
                   <button
-                    onClick={() => handleStopRecurrence(deleteTarget.id)}
+                    onClick={() => handleSkipOccurrence(deleteTarget.id)}
                     className="w-full rounded-lg border border-white/[0.07] px-4 py-3 text-left transition hover:bg-white/5"
                   >
-                    <div className="text-sm text-white/80">Stop repeating</div>
-                    <div className="mt-0.5 text-xs text-white/30">Keeps today's task, stops from tomorrow</div>
+                    <div className="text-sm text-white/80">Skip {groupText(deleteGroup)} only</div>
+                    <div className="mt-0.5 text-xs text-white/30">
+                      Hides {groupText(deleteGroup)}, keeps repeating before and after
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => handleStopAfter(deleteTarget.id)}
+                    className="w-full rounded-lg border border-white/[0.07] px-4 py-3 text-left transition hover:bg-white/5"
+                  >
+                    <div className="text-sm text-white/80">Stop after {groupText(deleteGroup)}</div>
+                    <div className="mt-0.5 text-xs text-white/30">
+                      Keeps repeating until {groupText(deleteGroup)}, then stops
+                    </div>
                   </button>
                   <button
                     onClick={() => handleDelete(deleteTarget.id)}
                     className="w-full rounded-lg border border-red-500/20 px-4 py-3 text-left transition hover:bg-red-500/10"
                   >
                     <div className="text-sm text-red-400">Delete entirely</div>
-                    <div className="mt-0.5 text-xs text-white/30">Removes this task permanently, including today</div>
+                    <div className="mt-0.5 text-xs text-white/30">Removes all occurrences permanently</div>
                   </button>
                 </div>
                 <button
-                  onClick={() => setDeleteTarget(null)}
+                  onClick={() => { setDeleteTarget(null); setDeleteGroup(null) }}
                   className="w-full py-1 text-center text-sm text-white/30 transition hover:text-white/50"
                 >
                   Cancel
