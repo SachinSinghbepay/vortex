@@ -181,11 +181,9 @@ export function TasksClient({ initialTasks, goals }: Props) {
     const activeIn = (sectionStart: Date, sectionEnd: Date) =>
       start < sectionEnd && (end === null || end >= sectionStart)
 
-    // If already active today, only show in Today — no need to repeat in every future section
-    if (activeIn(todayStart, todayEnd)) return ["Today"]
-
-    // Future start: show in each upcoming section it covers
+    // Show in every section the task is active in
     const groups: string[] = []
+    if (activeIn(todayStart, todayEnd)) groups.push("Today")
     if (activeIn(todayEnd, tomorrowEnd)) groups.push("Tomorrow")
     if (activeIn(tomorrowEnd, thisWeekEnd)) groups.push("This Week")
     if (activeIn(thisWeekEnd, nextWeekEnd)) groups.push("Next Week")
