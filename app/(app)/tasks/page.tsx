@@ -12,12 +12,13 @@ export default async function TasksPage() {
     getActiveGoals(userId),
   ])
 
-  const serialized = tasks.map((t) => ({
-    ...t,
-    startDate: t.startDate ? new Date(t.startDate).toISOString() : null,
-    dueDate: t.dueDate ? new Date(t.dueDate).toISOString() : null,
-    createdAt: new Date(t.createdAt).toISOString(),
-    updatedAt: new Date(t.updatedAt).toISOString(),
+  const serialized = tasks.map(({ startDate, dueDate, recurrenceEndDate, createdAt, updatedAt, ...rest }) => ({
+    ...rest,
+    startDate: startDate?.toISOString() ?? null,
+    dueDate: dueDate?.toISOString() ?? null,
+    recurrenceEndDate: recurrenceEndDate?.toISOString() ?? null,
+    createdAt: createdAt.toISOString(),
+    updatedAt: updatedAt.toISOString(),
   }))
 
   return <TasksClient initialTasks={serialized} goals={goals} />
