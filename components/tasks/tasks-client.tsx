@@ -507,12 +507,64 @@ export function TasksClient({ initialTasks, goals }: Props) {
           <h1 className="text-xl font-semibold text-white">Tasks</h1>
           <p className="mt-0.5 text-sm text-white/40">{remainingCount} remaining</p>
         </div>
-        <Button onClick={() => setShowCreate(true)} className="gap-1.5 bg-violet-600 text-white hover:bg-violet-500">
-          <Plus className="h-4 w-4" /> New Task
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* Date range picker — lives in header on mobile, hidden here on desktop */}
+          <div className="relative sm:hidden">
+            <button
+              onClick={() => setShowRangePicker((v) => !v)}
+              className={cn(
+                "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs transition-colors",
+                showRangePicker
+                  ? "border-violet-500/40 bg-violet-500/10 text-violet-300"
+                  : "border-white/[0.07] text-white/40 hover:bg-white/5 hover:text-white/60"
+              )}
+            >
+              <Calendar className="h-3 w-3" />
+              {rangeLabel}
+              <ChevronDown className={cn("h-3 w-3 transition-transform", showRangePicker && "rotate-180")} />
+            </button>
+            {showRangePicker && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setShowRangePicker(false)} />
+                <div className="absolute right-0 top-full z-20 mt-2 w-64 rounded-xl border border-white/8 bg-[#141414] p-4 shadow-2xl">
+                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-white/25">Quick select</p>
+                  <div className="mb-3 flex gap-1.5">
+                    {[{ label: "Last month", offset: -1 }, { label: "This month", offset: 0 }, { label: "Next month", offset: 1 }].map(({ label, offset }) => {
+                      const s = new Date(now.getFullYear(), now.getMonth() + offset, 1)
+                      const isActive = isFullMonth(rangeStart, rangeEnd) && rangeStart.getMonth() === s.getMonth() && rangeStart.getFullYear() === s.getFullYear()
+                      return (
+                        <button key={label} onClick={() => applyPreset(offset)} className={cn("flex-1 rounded-lg px-2 py-1.5 text-[10px] font-medium transition-colors", isActive ? "bg-violet-600 text-white" : "bg-white/5 text-white/50 hover:bg-white/10 hover:text-white/80")}>
+                          {offset === 0 ? "This month" : offset === -1 ? "Last month" : "Next month"}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <div className="border-t border-white/6 pt-3">
+                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-white/25">Custom range</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="text-[10px] text-white/30">From</label>
+                        <input type="date" value={pickerStart} onChange={(e) => setPickerStart(e.target.value)} className="w-full rounded-lg border border-white/[0.07] bg-white/4 px-2.5 py-1.5 text-[11px] text-white scheme-dark outline-none focus:border-violet-500/40" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] text-white/30">To</label>
+                        <input type="date" value={pickerEnd} onChange={(e) => setPickerEnd(e.target.value)} className="w-full rounded-lg border border-white/[0.07] bg-white/4 px-2.5 py-1.5 text-[11px] text-white scheme-dark outline-none focus:border-violet-500/40" />
+                      </div>
+                    </div>
+                    <Button onClick={applyCustomRange} disabled={!pickerStart || !pickerEnd} className="mt-2 w-full bg-violet-600 py-2 text-xs text-white hover:bg-violet-500">Apply range</Button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          <Button onClick={() => setShowCreate(true)} className="gap-1.5 bg-violet-600 text-white hover:bg-violet-500">
+            <Plus className="h-4 w-4" /> <span className="hidden sm:inline">New Task</span><span className="sm:hidden">New</span>
+          </Button>
+        </div>
       </div>
 
-      {/* Filters + date range */}
+      {/* Filters + date range (desktop) */}
       <div className="mb-6 flex items-center gap-1">
         {/* Filter tabs */}
         <div className="flex flex-1 gap-1">
@@ -531,8 +583,8 @@ export function TasksClient({ initialTasks, goals }: Props) {
           ))}
         </div>
 
-        {/* Date range picker */}
-        <div className="relative">
+        {/* Date range picker — desktop only */}
+        <div className="relative hidden sm:block">
           <button
             onClick={() => setShowRangePicker((v) => !v)}
             className={cn(
