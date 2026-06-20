@@ -34,6 +34,7 @@ export async function PATCH(
       }),
       ...(body.skippedDates !== undefined && { skippedDates: body.skippedDates }),
       ...(body.customDates !== undefined && { customDates: body.customDates }),
+      ...(body.completedSections !== undefined && { completedSections: body.completedSections }),
     },
   })
 

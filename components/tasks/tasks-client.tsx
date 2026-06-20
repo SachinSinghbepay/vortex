@@ -24,6 +24,7 @@ interface Task {
   recurrenceEndDate: string | null
   skippedDates: string
   customDates: string
+  completedSections: string
   updatedAt: string
   goal?: { id: string; title: string } | null
   createdAt: string
@@ -326,6 +327,18 @@ export function TasksClient({ initialTasks, goals }: Props) {
     return t.completed && new Date(t.updatedAt) >= todayStart
   }
 
+  const effectiveCompletedForGroup = (t: Task, group: string): boolean => {
+    if (!isRepeating(t.recurrence)) return t.completed
+    if (group === "Today") return t.completed && new Date(t.updatedAt) >= todayStart
+    const range = getSectionDateRange(group)
+    if (!range) return t.completed && new Date(t.updatedAt) >= todayStart
+    try {
+      const sections: { start: string; end: string }[] = JSON.parse(t.completedSections || "[]")
+      const key = formatDateForInput(range.start)
+      return sections.some(s => s.start === key)
+    } catch { return false }
+  }
+
   const todayStr = formatDateForInput(todayStart)
 
   const isInRange = (t: Task) => {
@@ -513,16 +526,41 @@ export function TasksClient({ initialTasks, goals }: Props) {
 
   // ── Actions ─────────────────────────────────────────────────────────────────
 
-  const handleToggle = async (id: string, completed: boolean) => {
-    setTasks((p) => p.map((t) =>
-      t.id === id ? { ...t, completed, updatedAt: new Date().toISOString() } : t
-    ))
+  const handleToggle = async (id: string, done: boolean, group: string) => {
+    const task = tasks.find((t) => t.id === id)
+    if (!task) return
+
+    if (!isRepeating(task.recurrence) || group === "Today") {
+      setTasks((p) => p.map((t) =>
+        t.id === id ? { ...t, completed: done, updatedAt: new Date().toISOString() } : t
+      ))
+      await fetch(`/api/tasks/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ completed: done }),
+      })
+      if (done) toast.success("Task completed ✓")
+      return
+    }
+
+    // Future sections: track per-section in completedSections
+    const range = getSectionDateRange(group)
+    if (!range) return
+    let sections: { start: string; end: string }[] = []
+    try { sections = JSON.parse(task.completedSections || "[]") } catch { /* empty */ }
+    const key = formatDateForInput(range.start)
+    const endKey = formatDateForInput(new Date(range.end.getTime() - 86400000))
+    const newSections = done
+      ? (sections.some(s => s.start === key) ? sections : [...sections, { start: key, end: endKey }])
+      : sections.filter(s => s.start !== key)
+    const payload = JSON.stringify(newSections)
+    setTasks((p) => p.map((t) => t.id === id ? { ...t, completedSections: payload } : t))
     await fetch(`/api/tasks/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ completed }),
+      body: JSON.stringify({ completedSections: payload }),
     })
-    if (completed) toast.success("Task completed ✓")
+    if (done) toast.success("Task completed ✓")
   }
 
   const handleDelete = async (id: string) => {
@@ -899,7 +937,7 @@ export function TasksClient({ initialTasks, goals }: Props) {
                   </div>
                   <ul className="divide-y divide-white/4">
                     {groupItems.map((task) => {
-                      const done = effectiveCompleted(task)
+                      const done = effectiveCompletedForGroup(task, task._group)
                       return (
                         <li
                           key={`${task.id}-${task._group}`}
@@ -908,7 +946,7 @@ export function TasksClient({ initialTasks, goals }: Props) {
                           {/* Row 1: circle + dot + title — desktop appends all metadata + actions inline */}
                           <div className="flex items-center gap-3">
                             <button
-                              onClick={() => handleToggle(task.id, !done)}
+                              onClick={() => handleToggle(task.id, !done, task._group)}
                               className="shrink-0 text-white/25 transition hover:text-violet-400"
                             >
                               {done ? <CheckCircle2 className="h-4 w-4 text-violet-400" /> : <Circle className="h-4 w-4" />}
