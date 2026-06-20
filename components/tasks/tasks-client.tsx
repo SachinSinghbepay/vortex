@@ -668,85 +668,101 @@ export function TasksClient({ initialTasks, goals }: Props) {
                       return (
                         <li
                           key={`${task.id}-${task._group}`}
-                          className="flex items-center gap-3 px-4 py-3.5 transition hover:bg-white/2"
+                          className="px-4 py-3 transition hover:bg-white/2"
                         >
-                          <button
-                            onClick={() => handleToggle(task.id, !done)}
-                            className="shrink-0 text-white/25 transition hover:text-violet-400"
-                          >
-                            {done ? (
-                              <CheckCircle2 className="h-4 w-4 text-violet-400" />
-                            ) : (
-                              <Circle className="h-4 w-4" />
-                            )}
-                          </button>
-
-                          <div className={cn("h-1.5 w-1.5 shrink-0 rounded-full", priorityDot[task.priority])} />
-
-                          <span
-                            className={cn(
-                              "flex-1 truncate text-sm",
-                              done ? "text-white/25 line-through" : "text-white/75"
-                            )}
-                          >
-                            {task.title}
-                          </span>
-
-                          {task.category && (
-                            <span className="shrink-0 rounded-md bg-white/5 px-2 py-0.5 text-[10px] text-white/30">
-                              {task.category}
-                            </span>
-                          )}
-
-                          {task.recurrence === "DAILY" ? (
-                            <div className="flex shrink-0 items-center gap-1 text-xs text-violet-400/50">
-                              <Repeat className="h-3 w-3" />
-                              {task.recurrenceEndDate
-                                ? `until ${new Date(task.recurrenceEndDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
-                                : "every day"}
-                            </div>
-                          ) : task.dueDate || task.startDate ? (
-                            <div className="flex shrink-0 items-center gap-1 text-xs text-white/25">
-                              <Calendar className="h-3 w-3" />
-                              {task.startDate && task.dueDate
-                                ? `${new Date(task.startDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${new Date(task.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
-                                : new Date((task.dueDate || task.startDate)!).toLocaleDateString("en-US", {
-                                    month: "short",
-                                    day: "numeric",
-                                  })}
-                            </div>
-                          ) : null}
-
-                          {task.goal && (
-                            <span className="shrink-0 rounded-md bg-violet-500/10 px-2 py-0.5 text-[10px] text-violet-400">
-                              {task.goal.title}
-                            </span>
-                          )}
-
-                          {!done && (
+                          {/* Row 1: circle + dot + title — desktop appends all metadata + actions inline */}
+                          <div className="flex items-center gap-3">
                             <button
-                              onClick={() => setBreakdownTask(task)}
-                              className="shrink-0 text-white/40 transition hover:text-violet-400"
-                              title="Break down with AI"
+                              onClick={() => handleToggle(task.id, !done)}
+                              className="shrink-0 text-white/25 transition hover:text-violet-400"
                             >
-                              <Sparkles className="h-3.5 w-3.5" />
+                              {done ? <CheckCircle2 className="h-4 w-4 text-violet-400" /> : <Circle className="h-4 w-4" />}
                             </button>
-                          )}
 
-                          <button
-                            onClick={() => openEdit(task)}
-                            className="shrink-0 text-white/40 transition hover:text-white/70"
-                            title="Edit task"
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
+                            <div className={cn("h-1.5 w-1.5 shrink-0 rounded-full", priorityDot[task.priority])} />
 
-                          <button
-                            onClick={() => { setDeleteTarget(task); setDeleteGroup(task._group) }}
-                            className="shrink-0 text-white/40 transition hover:text-red-400"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
+                            <span className={cn("flex-1 truncate text-sm", done ? "text-white/25 line-through" : "text-white/75")}>
+                              {task.title}
+                            </span>
+
+                            {/* Desktop: metadata + all actions inline */}
+                            <div className="hidden sm:flex items-center gap-2 shrink-0">
+                              {task.category && (
+                                <span className="rounded-md bg-white/5 px-2 py-0.5 text-[10px] text-white/30">{task.category}</span>
+                              )}
+                              {task.recurrence === "DAILY" ? (
+                                <div className="flex items-center gap-1 text-xs text-violet-400/50">
+                                  <Repeat className="h-3 w-3" />
+                                  {task.recurrenceEndDate
+                                    ? `until ${new Date(task.recurrenceEndDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                                    : "every day"}
+                                </div>
+                              ) : task.dueDate || task.startDate ? (
+                                <div className="flex items-center gap-1 text-xs text-white/25">
+                                  <Calendar className="h-3 w-3" />
+                                  {task.startDate && task.dueDate
+                                    ? `${new Date(task.startDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${new Date(task.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                                    : new Date((task.dueDate || task.startDate)!).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                </div>
+                              ) : null}
+                              {task.goal && (
+                                <span className="rounded-md bg-violet-500/10 px-2 py-0.5 text-[10px] text-violet-400">{task.goal.title}</span>
+                              )}
+                              {!done && (
+                                <button onClick={() => setBreakdownTask(task)} className="shrink-0 text-white/40 transition hover:text-violet-400" title="Break down with AI">
+                                  <Sparkles className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                              <button onClick={() => openEdit(task)} className="shrink-0 text-white/40 transition hover:text-white/70">
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                              <button onClick={() => { setDeleteTarget(task); setDeleteGroup(task._group) }} className="shrink-0 text-white/40 transition hover:text-red-400">
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+
+                            {/* Mobile: only delete on the title row */}
+                            <button
+                              onClick={() => { setDeleteTarget(task); setDeleteGroup(task._group) }}
+                              className="sm:hidden shrink-0 text-white/40 transition hover:text-red-400"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+
+                          {/* Row 2: mobile only — metadata chips + AI + edit */}
+                          <div className="flex sm:hidden items-center gap-1.5 mt-2 pl-[26px] flex-wrap">
+                            {task.category && (
+                              <span className="rounded-md bg-white/5 px-2 py-0.5 text-[10px] text-white/30">{task.category}</span>
+                            )}
+                            {task.recurrence === "DAILY" ? (
+                              <div className="flex items-center gap-1 text-[11px] text-violet-400/50">
+                                <Repeat className="h-3 w-3" />
+                                {task.recurrenceEndDate
+                                  ? `until ${new Date(task.recurrenceEndDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                                  : "every day"}
+                              </div>
+                            ) : task.dueDate || task.startDate ? (
+                              <div className="flex items-center gap-1 text-[11px] text-white/30">
+                                <Calendar className="h-3 w-3" />
+                                {task.startDate && task.dueDate
+                                  ? `${new Date(task.startDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${new Date(task.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                                  : new Date((task.dueDate || task.startDate)!).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                              </div>
+                            ) : null}
+                            {task.goal && (
+                              <span className="rounded-md bg-violet-500/10 px-2 py-0.5 text-[10px] text-violet-400">{task.goal.title}</span>
+                            )}
+                            <div className="flex-1" />
+                            {!done && (
+                              <button onClick={() => setBreakdownTask(task)} className="text-white/40 transition hover:text-violet-400">
+                                <Sparkles className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                            <button onClick={() => openEdit(task)} className="text-white/40 transition hover:text-white/70">
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
                         </li>
                       )
                     })}
