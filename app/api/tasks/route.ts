@@ -21,7 +21,7 @@ export async function POST(req: Request) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  const { title, priority, dueDate, startDate, category, goalId, recurrence, recurrenceEndDate } = await req.json()
+  const { title, priority, dueDate, startDate, category, goalId, recurrence, recurrenceEndDate, customDates } = await req.json()
   if (!title?.trim()) return NextResponse.json({ error: "Title required" }, { status: 400 })
 
   const task = await db.task.create({
@@ -34,6 +34,7 @@ export async function POST(req: Request) {
       goalId: goalId || null,
       recurrence: recurrence || "NONE",
       recurrenceEndDate: recurrenceEndDate ? new Date(recurrenceEndDate) : null,
+      customDates: customDates || "[]",
       userId: session.user.id,
     },
     include: { goal: { select: { id: true, title: true } } },

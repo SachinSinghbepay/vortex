@@ -33,6 +33,7 @@ export async function PATCH(
         recurrenceEndDate: body.recurrenceEndDate ? new Date(body.recurrenceEndDate) : null,
       }),
       ...(body.skippedDates !== undefined && { skippedDates: body.skippedDates }),
+      ...(body.customDates !== undefined && { customDates: body.customDates }),
     },
   })
 

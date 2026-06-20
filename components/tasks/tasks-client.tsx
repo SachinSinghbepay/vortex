@@ -1,8 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { toast } from "sonner"
-import { Plus, CheckCircle2, Circle, Trash2, Calendar, Sparkles, Repeat, ChevronDown, Pencil } from "lucide-react"
+import { Plus, CheckCircle2, Circle, Trash2, Calendar, Sparkles, Repeat, ChevronDown, ChevronLeft, ChevronRight, Pencil, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Modal } from "@/components/ui/modal"
 import { BreakdownModal } from "@/components/ai/breakdown-modal"
@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils"
 import { PageTransition } from "@/components/ui/page-transition"
 
 type Priority = "LOW" | "MEDIUM" | "HIGH" | "URGENT"
+type Recurrence = "NONE" | "DAILY" | "EVERY_OTHER_DAY" | "CUSTOM_DATES"
 
 interface Task {
   id: string
@@ -22,6 +23,7 @@ interface Task {
   recurrence: string
   recurrenceEndDate: string | null
   skippedDates: string
+  customDates: string
   updatedAt: string
   goal?: { id: string; title: string } | null
   createdAt: string
@@ -41,14 +43,129 @@ const filters = ["ALL", "TODAY", "PENDING", "COMPLETED"] as const
 const inputCls =
   "w-full rounded-lg border border-white/[0.07] bg-white/4 px-3.5 py-2.5 text-sm text-white placeholder-white/20 outline-none transition focus:border-violet-500/40 focus:bg-white/[0.07]"
 
-const selectCls =
-  "w-full rounded-lg border border-white/[0.07] bg-[#1a1a1a] px-3.5 py-2.5 text-sm text-white outline-none"
+
+const RECURRENCE_OPTIONS: { value: Recurrence; label: string; sub: string }[] = [
+  { value: "NONE", label: "None", sub: "One-time task" },
+  { value: "DAILY", label: "Every day", sub: "Repeats daily" },
+  { value: "EVERY_OTHER_DAY", label: "Alt. days", sub: "Every 2nd day" },
+  { value: "CUSTOM_DATES", label: "Pick dates", sub: "Choose specific dates" },
+]
+
+const PRIORITY_OPTIONS: { value: Priority; label: string; active: string; dot: string }[] = [
+  { value: "LOW", label: "Low", active: "border-white/20 bg-white/10 text-white/70", dot: "bg-white/30" },
+  { value: "MEDIUM", label: "Med", active: "border-blue-500/40 bg-blue-500/15 text-blue-300", dot: "bg-blue-400" },
+  { value: "HIGH", label: "High", active: "border-orange-500/40 bg-orange-500/15 text-orange-300", dot: "bg-orange-400" },
+  { value: "URGENT", label: "Urgent", active: "border-red-500/40 bg-red-500/15 text-red-300", dot: "bg-red-400" },
+]
+
+function MultiDatePicker({ selected, onChange }: { selected: string[]; onChange: (d: string[]) => void }) {
+  const [view, setView] = useState(() => {
+    const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), 1)
+  })
+  const year = view.getFullYear(), month = view.getMonth()
+  const firstDow = new Date(year, month, 1).getDay()
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`
+  const toggle = (s: string) => onChange(selected.includes(s) ? selected.filter(x => x !== s) : [...selected, s].sort())
+  const cells: (string | null)[] = Array(firstDow).fill(null)
+  for (let d = 1; d <= daysInMonth; d++) cells.push(fmt(new Date(year, month, d)))
+
+  return (
+    <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3">
+      <div className="mb-3 flex items-center justify-between">
+        <button type="button" onClick={() => setView(new Date(year, month-1, 1))} className="rounded-lg p-1.5 text-white/40 transition hover:bg-white/8 hover:text-white/70"><ChevronLeft className="h-3.5 w-3.5"/></button>
+        <span className="text-xs font-medium text-white/70">{view.toLocaleDateString("en-US",{month:"long",year:"numeric"})}</span>
+        <button type="button" onClick={() => setView(new Date(year, month+1, 1))} className="rounded-lg p-1.5 text-white/40 transition hover:bg-white/8 hover:text-white/70"><ChevronRight className="h-3.5 w-3.5"/></button>
+      </div>
+      <div className="mb-1 grid grid-cols-7 text-center text-[9px] font-medium uppercase tracking-widest text-white/20">
+        {["Su","Mo","Tu","We","Th","Fr","Sa"].map(d => <div key={d}>{d}</div>)}
+      </div>
+      <div className="grid grid-cols-7 gap-y-0.5">
+        {cells.map((s, i) =>
+          s ? (
+            <button key={i} type="button" onClick={() => toggle(s)}
+              className={cn("mx-auto flex h-7 w-7 items-center justify-center rounded-full text-xs transition",
+                selected.includes(s) ? "bg-violet-600 text-white" : "text-white/50 hover:bg-white/8 hover:text-white/80"
+              )}
+            >
+              {new Date(s+"T00:00:00").getDate()}
+            </button>
+          ) : <div key={i}/>
+        )}
+      </div>
+      {selected.length > 0 && (
+        <p className="mt-2 text-[10px] text-white/30">{selected.length} date{selected.length !== 1 ? "s" : ""} selected</p>
+      )}
+    </div>
+  )
+}
+
+function GoalPicker({
+  value,
+  onChange,
+  goals,
+}: {
+  value: string
+  onChange: (id: string) => void
+  goals: Array<{ id: string; title: string }>
+}) {
+  const [open, setOpen] = useState(false)
+  const [opensUp, setOpensUp] = useState(false)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const selected = goals.find((g) => g.id === value)
+
+  const toggle = () => {
+    if (!open && btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect()
+      setOpensUp(window.innerHeight - rect.bottom < 220)
+    }
+    setOpen((v) => !v)
+  }
+
+  return (
+    <div className="relative">
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={toggle}
+        className="flex w-full items-center justify-between rounded-lg border border-white/[0.07] bg-white/4 px-3.5 py-2.5 text-sm transition hover:border-white/15"
+      >
+        <span className={selected ? "text-white/75" : "text-white/25"}>{selected?.title ?? "None"}</span>
+        <ChevronDown className={cn("h-3.5 w-3.5 text-white/30 transition-transform", open && "rotate-180")} />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className={cn("absolute left-0 right-0 z-20 max-h-48 overflow-y-auto rounded-xl border border-white/8 bg-[#141414] shadow-2xl", opensUp ? "bottom-full mb-1" : "top-full mt-1")}>
+            <button
+              type="button"
+              onClick={() => { onChange(""); setOpen(false) }}
+              className={cn("w-full px-3.5 py-2.5 text-left text-sm transition hover:bg-white/5", !value ? "text-violet-300" : "text-white/30")}
+            >
+              None
+            </button>
+            {goals.map((g) => (
+              <button
+                key={g.id}
+                type="button"
+                onClick={() => { onChange(g.id); setOpen(false) }}
+                className={cn("w-full px-3.5 py-2.5 text-left text-sm transition hover:bg-white/5", value === g.id ? "text-violet-300" : "text-white/60")}
+              >
+                {g.title}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
 
 const emptyForm = {
   title: "",
   priority: "MEDIUM" as Priority,
   dueDate: "",
-  recurrence: "NONE" as "NONE" | "DAILY",
+  recurrence: "NONE" as Recurrence,
   startDate: "",
   recurrenceEndDate: "",
   category: "",
@@ -120,6 +237,8 @@ export function TasksClient({ initialTasks, goals }: Props) {
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState(emptyForm)
   const [editForm, setEditForm] = useState(emptyForm)
+  const [formCustomDates, setFormCustomDates] = useState<string[]>([])
+  const [editCustomDates, setEditCustomDates] = useState<string[]>([])
 
   // ── Date range helpers ──────────────────────────────────────────────────────
 
@@ -156,17 +275,19 @@ export function TasksClient({ initialTasks, goals }: Props) {
 
   // A task is "in the selected date range" (for ALL/PENDING/COMPLETED)
   const isInDateRange = (t: Task) => {
-    if (t.recurrence === "DAILY") {
+    if (t.recurrence === "CUSTOM_DATES") {
+      const dates: string[] = JSON.parse(t.customDates || "[]")
+      const effectiveEnd = rangeEnd < nextWeekEnd ? nextWeekEnd : rangeEnd
+      return dates.some(ds => { const d = new Date(ds+"T00:00:00"); return d >= rangeStart && d <= effectiveEnd })
+    }
+    if (t.recurrence === "DAILY" || t.recurrence === "EVERY_OTHER_DAY") {
       const start = t.startDate ? new Date(t.startDate) : new Date(t.createdAt)
       const end = t.recurrenceEndDate ? new Date(t.recurrenceEndDate) : null
-      // Always include tasks starting within the Next Week window even if that
-      // window bleeds past the range end (e.g. Jun range ends Jun 30 but Next Week
-      // runs to Jul 4 — a task starting Jul 1 should still show under Next Week)
       const effectiveEnd = rangeEnd < nextWeekEnd ? nextWeekEnd : rangeEnd
       return start <= effectiveEnd && (end === null || end >= rangeStart)
     }
     const d = t.startDate ? new Date(t.startDate) : t.dueDate ? new Date(t.dueDate) : null
-    if (!d) return true // no-date tasks always visible
+    if (!d) return true
     return d >= rangeStart && d <= rangeEnd
   }
 
@@ -198,16 +319,40 @@ export function TasksClient({ initialTasks, goals }: Props) {
 
   // ── Task state helpers ──────────────────────────────────────────────────────
 
+  const isRepeating = (r: string) => r !== "NONE"
+
   const effectiveCompleted = (t: Task) => {
-    if (t.recurrence !== "DAILY") return t.completed
+    if (!isRepeating(t.recurrence)) return t.completed
     return t.completed && new Date(t.updatedAt) >= todayStart
   }
 
+  const todayStr = formatDateForInput(todayStart)
+
   const isInRange = (t: Task) => {
-    if (t.recurrence !== "DAILY") return false
+    if (t.recurrence === "CUSTOM_DATES") {
+      const dates: string[] = JSON.parse(t.customDates || "[]")
+      return dates.includes(todayStr)
+    }
+    if (t.recurrence === "NONE") return false
     const start = t.startDate ? new Date(t.startDate) : new Date(t.createdAt)
     const end = t.recurrenceEndDate ? new Date(t.recurrenceEndDate) : null
-    return start <= todayEnd && (end === null || end >= todayStart)
+    if (!(start <= todayEnd && (end === null || end >= todayStart))) return false
+    if (t.recurrence === "EVERY_OTHER_DAY") {
+      const diffDays = Math.round((todayStart.getTime() - start.getTime()) / 86400000)
+      return diffDays >= 0 && diffDays % 2 === 0
+    }
+    return true // DAILY
+  }
+
+  const recurrenceLabel = (t: Task): string | null => {
+    if (!isRepeating(t.recurrence)) return null
+    if (t.recurrence === "CUSTOM_DATES") {
+      try { const d: string[] = JSON.parse(t.customDates || "[]"); return `${d.length} date${d.length !== 1 ? "s" : ""}` } catch { return "custom" }
+    }
+    const until = t.recurrenceEndDate
+      ? ` until ${new Date(t.recurrenceEndDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+      : ""
+    return t.recurrence === "EVERY_OTHER_DAY" ? `every 2 days${until}` : `every day${until}`
   }
 
   const getTaskDate = (t: Task) =>
@@ -216,15 +361,15 @@ export function TasksClient({ initialTasks, goals }: Props) {
   // ── Grouping ────────────────────────────────────────────────────────────────
 
   const getGroups = (t: Task): string[] => {
-    // Non-recurring completed before today → dated "Completed" section
-    if (t.recurrence !== "DAILY" && t.completed) {
+    // Non-repeating completed before today → dated "Completed" section
+    if (!isRepeating(t.recurrence) && t.completed) {
       const completedDate = new Date(t.updatedAt)
       if (completedDate < todayStart) {
         return [`Completed ${completedDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`]
       }
     }
 
-    if (t.recurrence !== "DAILY") {
+    if (!isRepeating(t.recurrence)) {
       const d = getTaskDate(t)
       if (!d) return ["No Date"]
       if (d < todayStart) return ["Overdue"]
@@ -235,16 +380,47 @@ export function TasksClient({ initialTasks, goals }: Props) {
       return [d.toLocaleDateString("en-US", { month: "long", year: "numeric" })]
     }
 
-    // Recurring: show in every near-future section it's active in
-    // (active today → Today only; future start → each applicable upcoming section)
-    const start = t.startDate ? new Date(t.startDate) : new Date(t.createdAt)
-    const end = t.recurrenceEndDate ? new Date(t.recurrenceEndDate) : null
-    const activeIn = (sectionStart: Date, sectionEnd: Date) =>
-      start < sectionEnd && (end === null || end >= sectionStart) && !isSectionSkipped(t, sectionStart)
-
-    // Show in every section the task is active in, but only if that section overlaps the date range
     const inRange = (sectionStart: Date, sectionEnd: Date) =>
       sectionEnd > rangeStart && sectionStart <= rangeEnd
+
+    // ── CUSTOM_DATES: place each selected date in its section ──
+    if (t.recurrence === "CUSTOM_DATES") {
+      const dates: string[] = JSON.parse(t.customDates || "[]")
+      const inSec = (ss: Date, se: Date) =>
+        !isSectionSkipped(t, ss) && dates.some(ds => { const d = new Date(ds+"T00:00:00"); return d >= ss && d < se })
+      const groups: string[] = []
+      if (inSec(todayStart, todayEnd)) groups.push("Today")
+      if (inSec(todayEnd, tomorrowEnd)) groups.push("Tomorrow")
+      if (inSec(tomorrowEnd, thisWeekEnd)) groups.push("This Week")
+      if (inSec(thisWeekEnd, nextWeekEnd)) groups.push("Next Week")
+      const rangeEndMonth = new Date(rangeEnd.getFullYear(), rangeEnd.getMonth() + 1, 1)
+      let cur = new Date(rangeStart.getFullYear(), rangeStart.getMonth(), 1)
+      while (cur < rangeEndMonth) {
+        const me = new Date(cur.getFullYear(), cur.getMonth() + 1, 1)
+        if (inSec(cur, me)) { const lbl = cur.toLocaleDateString("en-US",{month:"long",year:"numeric"}); if (!groups.includes(lbl)) groups.push(lbl) }
+        cur = me
+      }
+      return groups
+    }
+
+    // ── DAILY / EVERY_OTHER_DAY ──
+    const start = t.startDate ? new Date(t.startDate) : new Date(t.createdAt)
+    const end = t.recurrenceEndDate ? new Date(t.recurrenceEndDate) : null
+
+    const activeIn = (sectionStart: Date, sectionEnd: Date) => {
+      if (isSectionSkipped(t, sectionStart)) return false
+      if (start >= sectionEnd) return false
+      if (end && end < sectionStart) return false
+      if (t.recurrence === "DAILY") return true
+      // EVERY_OTHER_DAY: iterate through section days (max 31) for an active day
+      const cur = new Date(Math.max(sectionStart.getTime(), start.getTime()))
+      while (cur < sectionEnd) {
+        const diff = Math.round((cur.getTime() - start.getTime()) / 86400000)
+        if (diff % 2 === 0 && (!end || cur <= end)) return true
+        cur.setDate(cur.getDate() + 1)
+      }
+      return false
+    }
 
     const groups: string[] = []
     if (activeIn(todayStart, todayEnd) && inRange(todayStart, todayEnd)) groups.push("Today")
@@ -252,10 +428,8 @@ export function TasksClient({ initialTasks, goals }: Props) {
     if (activeIn(tomorrowEnd, thisWeekEnd) && inRange(tomorrowEnd, thisWeekEnd)) groups.push("This Week")
     if (activeIn(thisWeekEnd, nextWeekEnd) && inRange(thisWeekEnd, nextWeekEnd)) groups.push("Next Week")
 
-    // Beyond next week: one entry per month the task is active in, within the range
-    const monthCursorStart = new Date(nextWeekEnd.getFullYear(), nextWeekEnd.getMonth(), 1)
     const rangeEndMonth = new Date(rangeEnd.getFullYear(), rangeEnd.getMonth() + 1, 1)
-    let cursor = new Date(monthCursorStart)
+    let cursor = new Date(rangeStart.getFullYear(), rangeStart.getMonth(), 1)
     while (cursor < rangeEndMonth) {
       const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1)
       if (activeIn(cursor, monthEnd) && inRange(cursor, monthEnd)) {
@@ -293,7 +467,7 @@ export function TasksClient({ initialTasks, goals }: Props) {
   }
 
   const isActiveToday = (t: Task) => {
-    if (t.recurrence === "DAILY") return isInRange(t) && !effectiveCompleted(t) && !isSectionSkipped(t, todayStart)
+    if (isRepeating(t.recurrence)) return isInRange(t) && !effectiveCompleted(t) && !isSectionSkipped(t, todayStart)
     if (t.completed) return false
     if (t.startDate && t.dueDate) {
       const s = new Date(t.startDate), e = new Date(t.dueDate)
@@ -314,7 +488,7 @@ export function TasksClient({ initialTasks, goals }: Props) {
     if (!isInDateRange(t)) return false
     if (filter === "COMPLETED") return effectiveCompleted(t)
     if (filter === "PENDING") {
-      if (t.recurrence === "DAILY") return isInRange(t) && !effectiveCompleted(t)
+      if (isRepeating(t.recurrence)) return isInRange(t) && !effectiveCompleted(t)
       return !t.completed
     }
     return true
@@ -327,7 +501,7 @@ export function TasksClient({ initialTasks, goals }: Props) {
     if (f === "COMPLETED") return base.filter(effectiveCompleted).length
     if (f === "PENDING")
       return base.filter((t) => {
-        if (t.recurrence === "DAILY") return isInRange(t) && !effectiveCompleted(t)
+        if (isRepeating(t.recurrence)) return isInRange(t) && !effectiveCompleted(t)
         return !t.completed
       }).length
     return 0
@@ -412,13 +586,14 @@ export function TasksClient({ initialTasks, goals }: Props) {
     setEditForm({
       title: task.title,
       priority: task.priority,
-      recurrence: task.recurrence as "NONE" | "DAILY",
+      recurrence: task.recurrence as Recurrence,
       startDate: task.startDate ? task.startDate.split("T")[0] : "",
       dueDate: task.dueDate ? task.dueDate.split("T")[0] : "",
       recurrenceEndDate: task.recurrenceEndDate ? task.recurrenceEndDate.split("T")[0] : "",
       category: task.category ?? "",
       goalId: task.goal?.id ?? "",
     })
+    try { setEditCustomDates(JSON.parse(task.customDates || "[]")) } catch { setEditCustomDates([]) }
     setEditTarget(task)
   }
 
@@ -426,14 +601,18 @@ export function TasksClient({ initialTasks, goals }: Props) {
     if (!editTarget || !editForm.title.trim()) return
     setSaving(true)
     try {
+      const isCustom = editForm.recurrence === "CUSTOM_DATES"
       const body = {
         title: editForm.title.trim(),
         priority: editForm.priority,
         category: editForm.category || null,
         goalId: editForm.goalId || null,
         recurrence: editForm.recurrence,
+        customDates: isCustom ? JSON.stringify(editCustomDates) : "[]",
         ...(editForm.recurrence === "NONE"
           ? { dueDate: editForm.dueDate || null, startDate: null, recurrenceEndDate: null }
+          : isCustom
+          ? { startDate: null, dueDate: null, recurrenceEndDate: null }
           : { startDate: editForm.startDate || null, dueDate: null, recurrenceEndDate: editForm.recurrenceEndDate || null }),
       }
       const res = await fetch(`/api/tasks/${editTarget.id}`, {
@@ -474,8 +653,11 @@ export function TasksClient({ initialTasks, goals }: Props) {
           category: form.category || null,
           goalId: form.goalId || null,
           recurrence: form.recurrence,
+          customDates: form.recurrence === "CUSTOM_DATES" ? JSON.stringify(formCustomDates) : "[]",
           ...(form.recurrence === "NONE"
             ? { dueDate: form.dueDate || null }
+            : form.recurrence === "CUSTOM_DATES"
+            ? { startDate: null, dueDate: null, recurrenceEndDate: null }
             : {
                 startDate: form.startDate || new Date().toISOString().split("T")[0],
                 dueDate: null,
@@ -488,6 +670,7 @@ export function TasksClient({ initialTasks, goals }: Props) {
         setTasks((p) => [task, ...p])
         setShowCreate(false)
         setForm(emptyForm)
+        setFormCustomDates([])
         toast.success("Task added")
       } else {
         toast.error("Failed to add task")
@@ -742,12 +925,10 @@ export function TasksClient({ initialTasks, goals }: Props) {
                               {task.category && (
                                 <span className="rounded-md bg-white/5 px-2 py-0.5 text-[10px] text-white/30">{task.category}</span>
                               )}
-                              {task.recurrence === "DAILY" ? (
+                              {isRepeating(task.recurrence) ? (
                                 <div className="flex items-center gap-1 text-xs text-violet-400/50">
                                   <Repeat className="h-3 w-3" />
-                                  {task.recurrenceEndDate
-                                    ? `until ${new Date(task.recurrenceEndDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
-                                    : "every day"}
+                                  {recurrenceLabel(task)}
                                 </div>
                               ) : task.dueDate || task.startDate ? (
                                 <div className="flex items-center gap-1 text-xs text-white/25">
@@ -787,12 +968,10 @@ export function TasksClient({ initialTasks, goals }: Props) {
                             {task.category && (
                               <span className="rounded-md bg-white/5 px-2 py-0.5 text-[10px] text-white/30">{task.category}</span>
                             )}
-                            {task.recurrence === "DAILY" ? (
+                            {isRepeating(task.recurrence) ? (
                               <div className="flex items-center gap-1 text-[11px] text-violet-400/50">
                                 <Repeat className="h-3 w-3" />
-                                {task.recurrenceEndDate
-                                  ? `until ${new Date(task.recurrenceEndDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
-                                  : "every day"}
+                                {recurrenceLabel(task)}
                               </div>
                             ) : task.dueDate || task.startDate ? (
                               <div className="flex items-center gap-1 text-[11px] text-white/30">
@@ -830,14 +1009,14 @@ export function TasksClient({ initialTasks, goals }: Props) {
       <Modal
         open={!!deleteTarget}
         onClose={() => { setDeleteTarget(null); setDeleteGroup(null) }}
-        title={deleteTarget?.recurrence === "DAILY" ? "Remove repeating task" : "Delete task"}
+        title={deleteTarget && isRepeating(deleteTarget.recurrence) ? "Remove repeating task" : "Delete task"}
       >
         {deleteTarget && (
           <div className="space-y-4">
-            {deleteTarget.recurrence === "DAILY" ? (
+            {isRepeating(deleteTarget.recurrence) ? (
               <>
                 <p className="text-sm text-white/50">
-                  <span className="text-white/80">"{deleteTarget.title}"</span> repeats every day. What would you like to do?
+                  <span className="text-white/80">"{deleteTarget.title}"</span> is a repeating task. What would you like to do?
                 </p>
                 <div className="space-y-2">
                   <button
@@ -849,15 +1028,17 @@ export function TasksClient({ initialTasks, goals }: Props) {
                       Hides {groupText(deleteGroup)}, keeps repeating before and after
                     </div>
                   </button>
-                  <button
-                    onClick={() => handleStopAfter(deleteTarget.id)}
-                    className="w-full rounded-lg border border-white/[0.07] px-4 py-3 text-left transition hover:bg-white/5"
-                  >
-                    <div className="text-sm text-white/80">Stop after {groupText(deleteGroup)}</div>
-                    <div className="mt-0.5 text-xs text-white/30">
-                      Keeps repeating until {groupText(deleteGroup)}, then stops
-                    </div>
-                  </button>
+                  {deleteTarget.recurrence !== "CUSTOM_DATES" && (
+                    <button
+                      onClick={() => handleStopAfter(deleteTarget.id)}
+                      className="w-full rounded-lg border border-white/[0.07] px-4 py-3 text-left transition hover:bg-white/5"
+                    >
+                      <div className="text-sm text-white/80">Stop after {groupText(deleteGroup)}</div>
+                      <div className="mt-0.5 text-xs text-white/30">
+                        Keeps repeating until {groupText(deleteGroup)}, then stops
+                      </div>
+                    </button>
+                  )}
                   <button
                     onClick={() => handleDelete(deleteTarget.id)}
                     className="w-full rounded-lg border border-red-500/20 px-4 py-3 text-left transition hover:bg-red-500/10"
@@ -912,30 +1093,47 @@ export function TasksClient({ initialTasks, goals }: Props) {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Priority</label>
-              <select
-                value={editForm.priority}
-                onChange={(e) => setEditForm({ ...editForm, priority: e.target.value as Priority })}
-                className={selectCls}
-              >
-                <option value="LOW">Low</option>
-                <option value="MEDIUM">Medium</option>
-                <option value="HIGH">High</option>
-                <option value="URGENT">Urgent</option>
-              </select>
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Priority</label>
+            <div className="flex gap-1.5">
+              {PRIORITY_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setEditForm({ ...editForm, priority: opt.value })}
+                  className={cn(
+                    "flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-xs font-medium transition",
+                    editForm.priority === opt.value
+                      ? opt.active
+                      : "border-white/[0.07] text-white/30 hover:border-white/15 hover:text-white/50"
+                  )}
+                >
+                  <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", editForm.priority === opt.value ? opt.dot : "bg-white/20")} />
+                  {opt.label}
+                </button>
+              ))}
             </div>
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Repeat</label>
-              <select
-                value={editForm.recurrence}
-                onChange={(e) => setEditForm({ ...editForm, recurrence: e.target.value as "NONE" | "DAILY" })}
-                className={selectCls}
-              >
-                <option value="NONE">None</option>
-                <option value="DAILY">Every day</option>
-              </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Repeat</label>
+            <div className="grid grid-cols-2 gap-1.5">
+              {RECURRENCE_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setEditForm({ ...editForm, recurrence: opt.value })}
+                  className={cn(
+                    "flex flex-col rounded-lg border px-3 py-2.5 text-left transition",
+                    editForm.recurrence === opt.value
+                      ? "border-violet-500/40 bg-violet-500/10"
+                      : "border-white/[0.07] hover:border-white/15 hover:bg-white/3"
+                  )}
+                >
+                  <span className={cn("text-xs font-medium", editForm.recurrence === opt.value ? "text-violet-300" : "text-white/50")}>{opt.label}</span>
+                  <span className="mt-0.5 text-[10px] text-white/25">{opt.sub}</span>
+                </button>
+              ))}
             </div>
           </div>
 
@@ -948,6 +1146,11 @@ export function TasksClient({ initialTasks, goals }: Props) {
                 onChange={(e) => setEditForm({ ...editForm, dueDate: e.target.value })}
                 className={cn(inputCls, "scheme-dark")}
               />
+            </div>
+          ) : editForm.recurrence === "CUSTOM_DATES" ? (
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Pick Dates</label>
+              <MultiDatePicker selected={editCustomDates} onChange={setEditCustomDates} />
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3">
@@ -987,16 +1190,11 @@ export function TasksClient({ initialTasks, goals }: Props) {
           {goals.length > 0 && (
             <div className="space-y-1.5">
               <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Link to Goal</label>
-              <select
+              <GoalPicker
                 value={editForm.goalId}
-                onChange={(e) => setEditForm({ ...editForm, goalId: e.target.value })}
-                className={selectCls}
-              >
-                <option value="">None</option>
-                {goals.map((g) => (
-                  <option key={g.id} value={g.id}>{g.title}</option>
-                ))}
-              </select>
+                onChange={(id) => setEditForm({ ...editForm, goalId: id })}
+                goals={goals}
+              />
             </div>
           )}
 
@@ -1011,7 +1209,7 @@ export function TasksClient({ initialTasks, goals }: Props) {
       </Modal>
 
       {/* Create modal */}
-      <Modal open={showCreate} onClose={() => { setShowCreate(false); setForm(emptyForm) }} title="New Task">
+      <Modal open={showCreate} onClose={() => { setShowCreate(false); setForm(emptyForm); setFormCustomDates([]) }} title="New Task">
         <div className="space-y-4">
           <div className="space-y-1.5">
             <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Title</label>
@@ -1024,30 +1222,47 @@ export function TasksClient({ initialTasks, goals }: Props) {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Priority</label>
-              <select
-                value={form.priority}
-                onChange={(e) => setForm({ ...form, priority: e.target.value as Priority })}
-                className={selectCls}
-              >
-                <option value="LOW">Low</option>
-                <option value="MEDIUM">Medium</option>
-                <option value="HIGH">High</option>
-                <option value="URGENT">Urgent</option>
-              </select>
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Priority</label>
+            <div className="flex gap-1.5">
+              {PRIORITY_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setForm({ ...form, priority: opt.value })}
+                  className={cn(
+                    "flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-xs font-medium transition",
+                    form.priority === opt.value
+                      ? opt.active
+                      : "border-white/[0.07] text-white/30 hover:border-white/15 hover:text-white/50"
+                  )}
+                >
+                  <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", form.priority === opt.value ? opt.dot : "bg-white/20")} />
+                  {opt.label}
+                </button>
+              ))}
             </div>
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Repeat</label>
-              <select
-                value={form.recurrence}
-                onChange={(e) => setForm({ ...form, recurrence: e.target.value as "NONE" | "DAILY" })}
-                className={selectCls}
-              >
-                <option value="NONE">None</option>
-                <option value="DAILY">Every day</option>
-              </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Repeat</label>
+            <div className="grid grid-cols-2 gap-1.5">
+              {RECURRENCE_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setForm({ ...form, recurrence: opt.value })}
+                  className={cn(
+                    "flex flex-col rounded-lg border px-3 py-2.5 text-left transition",
+                    form.recurrence === opt.value
+                      ? "border-violet-500/40 bg-violet-500/10"
+                      : "border-white/[0.07] hover:border-white/15 hover:bg-white/3"
+                  )}
+                >
+                  <span className={cn("text-xs font-medium", form.recurrence === opt.value ? "text-violet-300" : "text-white/50")}>{opt.label}</span>
+                  <span className="mt-0.5 text-[10px] text-white/25">{opt.sub}</span>
+                </button>
+              ))}
             </div>
           </div>
 
@@ -1060,6 +1275,11 @@ export function TasksClient({ initialTasks, goals }: Props) {
                 onChange={(e) => setForm({ ...form, dueDate: e.target.value })}
                 className={cn(inputCls, "scheme-dark")}
               />
+            </div>
+          ) : form.recurrence === "CUSTOM_DATES" ? (
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Pick Dates</label>
+              <MultiDatePicker selected={formCustomDates} onChange={setFormCustomDates} />
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3">
@@ -1099,16 +1319,11 @@ export function TasksClient({ initialTasks, goals }: Props) {
           {goals.length > 0 && (
             <div className="space-y-1.5">
               <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Link to Goal</label>
-              <select
+              <GoalPicker
                 value={form.goalId}
-                onChange={(e) => setForm({ ...form, goalId: e.target.value })}
-                className={selectCls}
-              >
-                <option value="">None</option>
-                {goals.map((g) => (
-                  <option key={g.id} value={g.id}>{g.title}</option>
-                ))}
-              </select>
+                onChange={(id) => setForm({ ...form, goalId: id })}
+                goals={goals}
+              />
             </div>
           )}
 

@@ -94,6 +94,7 @@ model Task {
   recurrence        String    @default("NONE")
   recurrenceEndDate DateTime?
   skippedDates      String    @default("[]")
+  customDates       String    @default("[]")
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
