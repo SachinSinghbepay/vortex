@@ -159,7 +159,11 @@ export function TasksClient({ initialTasks, goals }: Props) {
     if (t.recurrence === "DAILY") {
       const start = t.startDate ? new Date(t.startDate) : new Date(t.createdAt)
       const end = t.recurrenceEndDate ? new Date(t.recurrenceEndDate) : null
-      return start <= rangeEnd && (end === null || end >= rangeStart)
+      // Always include tasks starting within the Next Week window even if that
+      // window bleeds past the range end (e.g. Jun range ends Jun 30 but Next Week
+      // runs to Jul 4 — a task starting Jul 1 should still show under Next Week)
+      const effectiveEnd = rangeEnd < nextWeekEnd ? nextWeekEnd : rangeEnd
+      return start <= effectiveEnd && (end === null || end >= rangeStart)
     }
     const d = t.startDate ? new Date(t.startDate) : t.dueDate ? new Date(t.dueDate) : null
     if (!d) return true // no-date tasks always visible
