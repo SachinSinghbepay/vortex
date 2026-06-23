@@ -248,6 +248,7 @@ export function TasksClient({ initialTasks, goals }: Props) {
   const [editForm, setEditForm] = useState(emptyForm)
   const [formCustomDates, setFormCustomDates] = useState<string[]>([])
   const [editCustomDates, setEditCustomDates] = useState<string[]>([])
+  const [expandedWeeks, setExpandedWeeks] = useState<Set<string>>(new Set())
 
   // ── Date range helpers ──────────────────────────────────────────────────────
 
@@ -295,7 +296,9 @@ export function TasksClient({ initialTasks, goals }: Props) {
     if (t.recurrence === "DAILY" || t.recurrence === "EVERY_OTHER_DAY") {
       const start = t.startDate ? new Date(t.startDate) : new Date(t.createdAt)
       const end = t.recurrenceEndDate ? new Date(t.recurrenceEndDate) : null
-      return start <= nextWeekBleedEnd && (end === null || end >= rangeStart)
+      // Only bleed into next week if task already starts within the range
+      const bleedEnd = start <= rangeEnd ? nextWeekBleedEnd : rangeEnd
+      return start <= bleedEnd && (end === null || end >= rangeStart)
     }
     const d = t.startDate ? new Date(t.startDate) : t.dueDate ? new Date(t.dueDate) : null
     if (!d) return true
@@ -310,8 +313,12 @@ export function TasksClient({ initialTasks, goals }: Props) {
     if (group === "This Week") return { start: tomorrowEnd, end: thisWeekEnd }
     if (group === "Next Week") return { start: thisWeekEnd, end: nextWeekEnd }
     const d = new Date(group)
-    if (!isNaN(d.getTime()))
+    if (!isNaN(d.getTime())) {
+      // YYYY-MM-DD = day-level section (for completedSections toggle in COMPLETED view)
+      if (/^\d{4}-\d{2}-\d{2}$/.test(group))
+        return { start: d, end: new Date(d.getTime() + 86400000) }
       return { start: new Date(d.getFullYear(), d.getMonth(), 1), end: new Date(d.getFullYear(), d.getMonth() + 1, 1) }
+    }
     return null
   }
 
@@ -334,22 +341,35 @@ export function TasksClient({ initialTasks, goals }: Props) {
 
   const effectiveCompleted = (t: Task) => {
     if (!isRepeating(t.recurrence)) return t.completed
+    const dates = parseCompletedDates(t)
+    if (dates.includes(todayStr)) return true
+    // Legacy: completed via old boolean path before date log existed
     return t.completed && new Date(t.updatedAt) >= todayStart
   }
 
   const effectiveCompletedForGroup = (t: Task, group: string): boolean => {
     if (!isRepeating(t.recurrence)) return t.completed
-    if (group === "Today") return t.completed && new Date(t.updatedAt) >= todayStart
+    const dates = parseCompletedDates(t)
     const range = getSectionDateRange(group)
-    if (!range) return t.completed && new Date(t.updatedAt) >= todayStart
-    try {
-      const sections: { start: string; end: string }[] = JSON.parse(t.completedSections || "[]")
-      const key = formatDateForInput(range.start)
-      return sections.some(s => s.start === key)
-    } catch { return false }
+    if (!range) return dates.includes(todayStr)
+    if (dates.some(d => { const dt = new Date(d + "T00:00:00"); return dt >= range.start && dt < range.end })) return true
+    // Legacy fallback for Today
+    if (group === "Today") return t.completed && new Date(t.updatedAt) >= todayStart
+    return false
   }
 
   const todayStr = formatDateForInput(todayStart)
+
+  // Parse completedSections as a flat date-string array ["YYYY-MM-DD", ...]
+  // Handles legacy {start,end} object format by extracting the start date
+  const parseCompletedDates = (t: Task): string[] => {
+    try {
+      const raw = JSON.parse(t.completedSections || "[]")
+      if (!Array.isArray(raw) || raw.length === 0) return []
+      if (typeof raw[0] === "string") return raw as string[]
+      return (raw as { start: string }[]).map(s => s.start)
+    } catch { return [] }
+  }
 
   const isInRange = (t: Task) => {
     if (t.recurrence === "CUSTOM_DATES") {
@@ -420,7 +440,8 @@ export function TasksClient({ initialTasks, goals }: Props) {
       let cur = new Date(rangeStart.getFullYear(), rangeStart.getMonth(), 1)
       while (cur < rangeEndMonth) {
         const me = new Date(cur.getFullYear(), cur.getMonth() + 1, 1)
-        if (inSec(cur, me)) { const lbl = cur.toLocaleDateString("en-US",{month:"long",year:"numeric"}); if (!groups.includes(lbl)) groups.push(lbl) }
+        const isCurMonth = cur.getFullYear() === now.getFullYear() && cur.getMonth() === now.getMonth()
+        if (!isCurMonth && inSec(cur, me)) { const lbl = cur.toLocaleDateString("en-US",{month:"long",year:"numeric"}); if (!groups.includes(lbl)) groups.push(lbl) }
         cur = me
       }
       return groups
@@ -455,7 +476,8 @@ export function TasksClient({ initialTasks, goals }: Props) {
     let cursor = new Date(rangeStart.getFullYear(), rangeStart.getMonth(), 1)
     while (cursor < rangeEndMonth) {
       const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1)
-      if (activeIn(cursor, monthEnd) && inRange(cursor, monthEnd)) {
+      const isCurMon = cursor.getFullYear() === now.getFullYear() && cursor.getMonth() === now.getMonth()
+      if (!isCurMon && activeIn(cursor, monthEnd) && inRange(cursor, monthEnd)) {
         const label = cursor.toLocaleDateString("en-US", { month: "long", year: "numeric" })
         if (!groups.includes(label)) groups.push(label)
       }
@@ -489,21 +511,85 @@ export function TasksClient({ initialTasks, goals }: Props) {
     })
   }
 
-  const isActiveToday = (t: Task) => {
-    if (isRepeating(t.recurrence)) return isInRange(t) && !effectiveCompleted(t) && !isSectionSkipped(t, todayStart)
-    if (t.completed) return false
-    if (t.startDate && t.dueDate) {
-      const s = new Date(t.startDate), e = new Date(t.dueDate)
-      return s <= todayEnd && e >= todayStart
+  // Groups completed tasks by the day they were actually checked off
+  const getCompletedGroups = (): [string, TaskEntry[]][] => {
+    const map = new Map<string, TaskEntry[]>()
+    const yesterday = new Date(todayStart); yesterday.setDate(yesterday.getDate() - 1)
+
+    const dayLabel = (d: Date): string => {
+      const ms = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+      if (ms === todayStart.getTime()) return "Today"
+      if (ms === yesterday.getTime()) return "Yesterday"
+      return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
     }
-    if (t.dueDate) {
-      const d = new Date(t.dueDate)
-      return d >= todayStart && d < todayEnd
+
+    const push = (t: Task, completedAt: Date, toggleGroup: string) => {
+      if (completedAt < rangeStart || completedAt > rangeEnd) return
+      const label = dayLabel(completedAt)
+      if (!map.has(label)) map.set(label, [])
+      const bucket = map.get(label)!
+      if (!bucket.some(e => e.id === t.id && e._group === toggleGroup))
+        bucket.push({ ...t, _group: toggleGroup })
     }
-    return false
+
+    for (const t of tasks) {
+      if (!isInDateRange(t)) continue
+      if (!isRepeating(t.recurrence)) {
+        if (t.completed) push(t, new Date(t.updatedAt), "Today")
+      } else {
+        const dates = parseCompletedDates(t)
+        for (const dateStr of dates) {
+          push(t, new Date(dateStr + "T00:00:00"), dateStr)
+        }
+        // Legacy: completed=true but date log is empty (old boolean-only data)
+        if (dates.length === 0 && t.completed) {
+          push(t, new Date(t.updatedAt), "Today")
+        }
+      }
+    }
+
+    return Array.from(map.entries()).sort(([a], [b]) => {
+      if (a === "Today") return -1; if (b === "Today") return 1
+      if (a === "Yesterday") return -1; if (b === "Yesterday") return 1
+      return new Date(b).getTime() - new Date(a).getTime()
+    })
   }
 
-  // Like isActiveToday but includes completed tasks — used for TODAY filter display
+  const getWeekDaySubGroups = (items: TaskEntry[], weekStart: Date, weekEnd: Date): [string, TaskEntry[]][] => {
+    const map = new Map<string, TaskEntry[]>()
+    for (const t of items) {
+      let cur = new Date(weekStart)
+      while (cur < weekEnd) {
+        const dayEnd = new Date(cur.getTime() + 86400000)
+        const dayStr = formatDateForInput(cur)
+        let active = false
+        if (!isRepeating(t.recurrence)) {
+          const d = t.dueDate ? new Date(t.dueDate) : t.startDate ? new Date(t.startDate) : null
+          active = !!(d && d >= cur && d < dayEnd)
+        } else if (t.recurrence === "DAILY") {
+          const s = t.startDate ? new Date(t.startDate) : new Date(t.createdAt)
+          const e = t.recurrenceEndDate ? new Date(t.recurrenceEndDate) : null
+          active = s <= cur && (e === null || e >= cur) && !isSectionSkipped(t, cur)
+        } else if (t.recurrence === "EVERY_OTHER_DAY") {
+          const s = t.startDate ? new Date(t.startDate) : new Date(t.createdAt)
+          const e = t.recurrenceEndDate ? new Date(t.recurrenceEndDate) : null
+          if (s <= cur && (e === null || e >= cur) && !isSectionSkipped(t, cur)) {
+            const diff = Math.round((cur.getTime() - s.getTime()) / 86400000)
+            active = diff % 2 === 0
+          }
+        } else if (t.recurrence === "CUSTOM_DATES") {
+          try { active = (JSON.parse(t.customDates || "[]") as string[]).includes(dayStr) && !isSectionSkipped(t, cur) } catch { /* empty */ }
+        }
+        if (active) {
+          if (!map.has(dayStr)) map.set(dayStr, [])
+          map.get(dayStr)!.push({ ...t, _group: dayStr })
+        }
+        cur = dayEnd
+      }
+    }
+    return Array.from(map.entries()).sort(([a], [b]) => a < b ? -1 : 1)
+  }
+
   const isScheduledToday = (t: Task) => {
     if (isRepeating(t.recurrence)) return isInRange(t) && !isSectionSkipped(t, todayStart)
     if (t.startDate && t.dueDate) {
@@ -520,10 +606,12 @@ export function TasksClient({ initialTasks, goals }: Props) {
   // ── Filtering ───────────────────────────────────────────────────────────────
 
   const isCompletedInRange = (t: Task) => {
-    if (!t.completed) return false
-    if (!isRepeating(t.recurrence)) return true
-    const d = new Date(t.updatedAt)
-    return d >= rangeStart && d <= rangeEnd
+    if (!isRepeating(t.recurrence)) return t.completed
+    const dates = parseCompletedDates(t)
+    if (dates.some(d => { const dt = new Date(d + "T00:00:00"); return dt >= rangeStart && dt <= rangeEnd })) return true
+    // Legacy: stale completed=true with no date log yet
+    if (t.completed) { const d = new Date(t.updatedAt); return d >= rangeStart && d <= rangeEnd }
+    return false
   }
 
   // TODAY bypasses date range; ALL/PENDING/COMPLETED respect it
@@ -539,7 +627,7 @@ export function TasksClient({ initialTasks, goals }: Props) {
   })
 
   const filterCount = (f: (typeof filters)[number]) => {
-    if (f === "TODAY") return tasks.filter(isActiveToday).length
+    if (f === "TODAY") return tasks.filter(isScheduledToday).length
     const base = tasks.filter(isInDateRange)
     if (f === "ALL") return base.length
     if (f === "COMPLETED") return base.filter(isCompletedInRange).length
@@ -561,7 +649,8 @@ export function TasksClient({ initialTasks, goals }: Props) {
     const task = tasks.find((t) => t.id === id)
     if (!task) return
 
-    if (!isRepeating(task.recurrence) || group === "Today") {
+    if (!isRepeating(task.recurrence)) {
+      // Non-recurring: simple boolean
       setTasks((p) => p.map((t) =>
         t.id === id ? { ...t, completed: done, updatedAt: new Date().toISOString() } : t
       ))
@@ -574,22 +663,33 @@ export function TasksClient({ initialTasks, goals }: Props) {
       return
     }
 
-    // Future sections: track per-section in completedSections
-    const range = getSectionDateRange(group)
+    // Recurring tasks: log each completed occurrence date in completedSections
+    // completedSections stores a flat array of date strings: ["YYYY-MM-DD", ...]
+    const range = group === "Today" ? { start: todayStart, end: todayEnd } : getSectionDateRange(group)
     if (!range) return
-    let sections: { start: string; end: string }[] = []
-    try { sections = JSON.parse(task.completedSections || "[]") } catch { /* empty */ }
-    const key = formatDateForInput(range.start)
-    const endKey = formatDateForInput(new Date(range.end.getTime() - 86400000))
-    const newSections = done
-      ? (sections.some(s => s.start === key) ? sections : [...sections, { start: key, end: endKey }])
-      : sections.filter(s => s.start !== key)
-    const payload = JSON.stringify(newSections)
-    setTasks((p) => p.map((t) => t.id === id ? { ...t, completedSections: payload } : t))
+    // Store the occurrence date (start of the section being completed)
+    const occurrenceDate = formatDateForInput(range.start)
+
+    const dates = parseCompletedDates(task)
+    // Migrate legacy: if this is the first write and completed=true, preserve the updatedAt date as a prior log entry
+    const seedDates = (dates.length === 0 && task.completed)
+      ? [formatDateForInput(new Date(task.updatedAt))]
+      : dates
+    const newDates = done
+      ? (seedDates.includes(occurrenceDate) ? seedDates : [...seedDates, occurrenceDate])
+      : seedDates.filter(d => d !== occurrenceDate)
+    const payload = JSON.stringify(newDates)
+    // When unchecking, clear completed flag so the legacy updatedAt fallback can't resurrect it
+    const patchBody: Record<string, unknown> = { completedSections: payload }
+    if (!done) patchBody.completed = false
+    setTasks((p) => p.map((t) => t.id === id
+      ? { ...t, completedSections: payload, ...(!done && { completed: false }) }
+      : t
+    ))
     await fetch(`/api/tasks/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ completedSections: payload }),
+      body: JSON.stringify(patchBody),
     })
     if (done) toast.success("Task completed ✓")
   }
@@ -750,6 +850,98 @@ export function TasksClient({ initialTasks, goals }: Props) {
   }
 
   // ── Render ──────────────────────────────────────────────────────────────────
+
+  const renderTaskLi = (task: TaskEntry, done: boolean) => (
+    <li key={`${task.id}-${task._group}`} className="px-4 py-3 transition hover:bg-white/2">
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => handleToggle(task.id, !done, task._group)}
+          className="shrink-0 text-white/25 transition hover:text-violet-400"
+        >
+          {done ? <CheckCircle2 className="h-4 w-4 text-violet-400" /> : <Circle className="h-4 w-4" />}
+        </button>
+        <div className={cn("h-1.5 w-1.5 shrink-0 rounded-full", priorityDot[task.priority])} />
+        <span className={cn("flex-1 truncate text-sm", done ? "text-white/25 line-through" : "text-white/75")}>
+          {task.title}
+        </span>
+        <div className="hidden sm:flex items-center gap-2 shrink-0">
+          {task.category && (
+            <span className="rounded-md bg-white/5 px-2 py-0.5 text-[10px] text-white/30">{task.category}</span>
+          )}
+          {isRepeating(task.recurrence) ? (
+            <div className="flex items-center gap-1 text-xs text-violet-400/50">
+              <Repeat className="h-3 w-3" />
+              {recurrenceLabel(task)}
+            </div>
+          ) : task.dueDate || task.startDate ? (
+            <div className="flex items-center gap-1 text-xs text-white/25">
+              <Calendar className="h-3 w-3" />
+              {task.startDate && task.dueDate
+                ? `${new Date(task.startDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${new Date(task.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                : new Date((task.dueDate || task.startDate)!).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+            </div>
+          ) : null}
+          {task.goal && (
+            <span className="rounded-md bg-violet-500/10 px-2 py-0.5 text-[10px] text-violet-400">{task.goal.title}</span>
+          )}
+          {!done && (
+            <button onClick={() => setBreakdownTask(task)} className="shrink-0 text-white/40 transition hover:text-violet-400" title="Break down with AI">
+              <Sparkles className="h-3.5 w-3.5" />
+            </button>
+          )}
+          <button onClick={() => openEdit(task)} className="shrink-0 text-white/40 transition hover:text-white/70">
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+          <button onClick={() => { setDeleteTarget(task); setDeleteGroup(task._group) }} className="shrink-0 text-white/40 transition hover:text-red-400">
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+        <button
+          onClick={() => { setDeleteTarget(task); setDeleteGroup(task._group) }}
+          className="sm:hidden shrink-0 text-white/40 transition hover:text-red-400"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <div className="flex sm:hidden items-center gap-1.5 mt-2 pl-[26px] flex-wrap">
+        {task.category && (
+          <span className="rounded-md bg-white/5 px-2 py-0.5 text-[10px] text-white/30">{task.category}</span>
+        )}
+        {isRepeating(task.recurrence) ? (
+          <div className="flex items-center gap-1 text-[11px] text-violet-400/50">
+            <Repeat className="h-3 w-3" />
+            {recurrenceLabel(task)}
+          </div>
+        ) : task.dueDate || task.startDate ? (
+          <div className="flex items-center gap-1 text-[11px] text-white/30">
+            <Calendar className="h-3 w-3" />
+            {task.startDate && task.dueDate
+              ? `${new Date(task.startDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${new Date(task.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+              : new Date((task.dueDate || task.startDate)!).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+          </div>
+        ) : null}
+        {task.goal && (
+          <span className="rounded-md bg-violet-500/10 px-2 py-0.5 text-[10px] text-violet-400">{task.goal.title}</span>
+        )}
+        <div className="flex-1" />
+        {!done && (
+          <button onClick={() => setBreakdownTask(task)} className="text-white/40 transition hover:text-violet-400">
+            <Sparkles className="h-3.5 w-3.5" />
+          </button>
+        )}
+        <button onClick={() => openEdit(task)} className="text-white/40 transition hover:text-white/70">
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </li>
+  )
+
+  const displayGroups = filter === "COMPLETED"
+    ? getCompletedGroups()
+    : groupTasks(filtered).filter(([g]) => {
+        if (filter === "TODAY" || filter === "PENDING") return g === "Today"
+        return true
+      })
 
   return (
     <PageTransition className="min-h-full p-4 lg:p-8">
@@ -926,7 +1118,7 @@ export function TasksClient({ initialTasks, goals }: Props) {
 
       {/* Task list */}
       <div className="rounded-xl border border-white/6">
-        {filtered.length === 0 ? (
+        {displayGroups.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <CheckCircle2 className="mb-2 h-8 w-8 text-white/10" />
             <p className="text-sm text-white/25">
@@ -943,16 +1135,22 @@ export function TasksClient({ initialTasks, goals }: Props) {
             )}
           </div>
         ) : (
-          <div>
-            {groupTasks(filtered)
-              .filter(([g]) => {
-                if (filter === "TODAY" || filter === "PENDING") return g === "Today"
-                if (filter === "COMPLETED") return g.startsWith("Completed ") || /^[A-Za-z]+ \d{4}$/.test(g)
-                return true
-              })
+          <div className="divide-y divide-white/10">
+            {displayGroups
               .map(([groupLabel, groupItems]) => {
-              const isCompletedGroup = groupLabel.startsWith("Completed ")
+              const isCompletedView = filter === "COMPLETED"
+              const isCompletedGroup = isCompletedView || groupLabel.startsWith("Completed ")
               const isOverdue = groupLabel === "Overdue"
+              const isDateKey = /^\d{4}-\d{2}-\d{2}$/.test(groupLabel)
+              const displayLabel = isDateKey
+                ? new Date(groupLabel + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
+                : groupLabel
+              const isThisWeek = groupLabel === "This Week"
+              const isNextWeek = groupLabel === "Next Week"
+              const isExpandable = isThisWeek || isNextWeek
+              const isExpanded = expandedWeeks.has(groupLabel)
+              const weekStart = isThisWeek ? tomorrowEnd : thisWeekEnd
+              const weekEnd = isThisWeek ? thisWeekEnd : nextWeekEnd
               return (
                 <div key={groupLabel}>
                   <div
@@ -965,114 +1163,44 @@ export function TasksClient({ initialTasks, goals }: Props) {
                     {isCompletedGroup ? (
                       <>
                         <CheckCircle2 className="h-3 w-3" />
-                        {groupLabel.replace("Completed ", "")}
+                        {displayLabel}
                       </>
                     ) : (
-                      groupLabel
+                      displayLabel
                     )}
                     <span className="font-normal normal-case tracking-normal text-white/15">{groupItems.length}</span>
+                    {isExpandable && (
+                      <button
+                        onClick={() => setExpandedWeeks(prev => {
+                          const next = new Set(prev)
+                          next.has(groupLabel) ? next.delete(groupLabel) : next.add(groupLabel)
+                          return next
+                        })}
+                        className="ml-auto text-white/40 transition hover:text-white/70"
+                      >
+                        <ChevronDown className={cn("h-4 w-4 transition-transform", isExpanded && "rotate-180")} />
+                      </button>
+                    )}
                   </div>
-                  <ul className="divide-y divide-white/4">
-                    {groupItems.map((task) => {
-                      const done = effectiveCompletedForGroup(task, task._group)
-                      return (
-                        <li
-                          key={`${task.id}-${task._group}`}
-                          className="px-4 py-3 transition hover:bg-white/2"
-                        >
-                          {/* Row 1: circle + dot + title — desktop appends all metadata + actions inline */}
-                          <div className="flex items-center gap-3">
-                            <button
-                              onClick={() => handleToggle(task.id, !done, task._group)}
-                              className="shrink-0 text-white/25 transition hover:text-violet-400"
-                            >
-                              {done ? <CheckCircle2 className="h-4 w-4 text-violet-400" /> : <Circle className="h-4 w-4" />}
-                            </button>
-
-                            <div className={cn("h-1.5 w-1.5 shrink-0 rounded-full", priorityDot[task.priority])} />
-
-                            <span className={cn("flex-1 truncate text-sm", done ? "text-white/25 line-through" : "text-white/75")}>
-                              {task.title}
-                            </span>
-
-                            {/* Desktop: metadata + all actions inline */}
-                            <div className="hidden sm:flex items-center gap-2 shrink-0">
-                              {task.category && (
-                                <span className="rounded-md bg-white/5 px-2 py-0.5 text-[10px] text-white/30">{task.category}</span>
-                              )}
-                              {isRepeating(task.recurrence) ? (
-                                <div className="flex items-center gap-1 text-xs text-violet-400/50">
-                                  <Repeat className="h-3 w-3" />
-                                  {recurrenceLabel(task)}
-                                </div>
-                              ) : task.dueDate || task.startDate ? (
-                                <div className="flex items-center gap-1 text-xs text-white/25">
-                                  <Calendar className="h-3 w-3" />
-                                  {task.startDate && task.dueDate
-                                    ? `${new Date(task.startDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${new Date(task.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
-                                    : new Date((task.dueDate || task.startDate)!).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                                </div>
-                              ) : null}
-                              {task.goal && (
-                                <span className="rounded-md bg-violet-500/10 px-2 py-0.5 text-[10px] text-violet-400">{task.goal.title}</span>
-                              )}
-                              {!done && (
-                                <button onClick={() => setBreakdownTask(task)} className="shrink-0 text-white/40 transition hover:text-violet-400" title="Break down with AI">
-                                  <Sparkles className="h-3.5 w-3.5" />
-                                </button>
-                              )}
-                              <button onClick={() => openEdit(task)} className="shrink-0 text-white/40 transition hover:text-white/70">
-                                <Pencil className="h-3.5 w-3.5" />
-                              </button>
-                              <button onClick={() => { setDeleteTarget(task); setDeleteGroup(task._group) }} className="shrink-0 text-white/40 transition hover:text-red-400">
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-
-                            {/* Mobile: only delete on the title row */}
-                            <button
-                              onClick={() => { setDeleteTarget(task); setDeleteGroup(task._group) }}
-                              className="sm:hidden shrink-0 text-white/40 transition hover:text-red-400"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
+                  {isExpandable && isExpanded ? (
+                    <div className="divide-y divide-white/8">
+                      {getWeekDaySubGroups(groupItems, weekStart, weekEnd).map(([dayStr, dayItems]) => (
+                        <div key={dayStr}>
+                          <div className="flex items-center gap-2 px-4 py-1.5 text-[10px] font-medium uppercase tracking-widest text-white/20">
+                            <span className="pl-7">{new Date(dayStr + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</span>
+                            <span className="text-white/10">{dayItems.length}</span>
                           </div>
-
-                          {/* Row 2: mobile only — metadata chips + AI + edit */}
-                          <div className="flex sm:hidden items-center gap-1.5 mt-2 pl-[26px] flex-wrap">
-                            {task.category && (
-                              <span className="rounded-md bg-white/5 px-2 py-0.5 text-[10px] text-white/30">{task.category}</span>
-                            )}
-                            {isRepeating(task.recurrence) ? (
-                              <div className="flex items-center gap-1 text-[11px] text-violet-400/50">
-                                <Repeat className="h-3 w-3" />
-                                {recurrenceLabel(task)}
-                              </div>
-                            ) : task.dueDate || task.startDate ? (
-                              <div className="flex items-center gap-1 text-[11px] text-white/30">
-                                <Calendar className="h-3 w-3" />
-                                {task.startDate && task.dueDate
-                                  ? `${new Date(task.startDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${new Date(task.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
-                                  : new Date((task.dueDate || task.startDate)!).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                              </div>
-                            ) : null}
-                            {task.goal && (
-                              <span className="rounded-md bg-violet-500/10 px-2 py-0.5 text-[10px] text-violet-400">{task.goal.title}</span>
-                            )}
-                            <div className="flex-1" />
-                            {!done && (
-                              <button onClick={() => setBreakdownTask(task)} className="text-white/40 transition hover:text-violet-400">
-                                <Sparkles className="h-3.5 w-3.5" />
-                              </button>
-                            )}
-                            <button onClick={() => openEdit(task)} className="text-white/40 transition hover:text-white/70">
-                              <Pencil className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </li>
-                      )
-                    })}
-                  </ul>
+                          <ul>
+                            {dayItems.map((task) => renderTaskLi(task, effectiveCompletedForGroup(task, task._group)))}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <ul>
+                      {groupItems.map((task) => renderTaskLi(task, isCompletedView ? true : effectiveCompletedForGroup(task, task._group)))}
+                    </ul>
+                  )}
                 </div>
               )
             })}

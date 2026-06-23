@@ -132,6 +132,9 @@ html:not(.dark) {
   /* ── Dividers ─────────────────────────────────────────────────────────── */
   .divide-white\/4 > * + *               { border-color: oklch(0 0 0 / 5%) !important; }
   .divide-white\/\[0\.04\] > * + *       { border-color: oklch(0 0 0 / 5%) !important; }
+  .divide-white\/6 > * + *               { border-color: oklch(0 0 0 / 8%) !important; }
+  .divide-white\/8 > * + *               { border-color: oklch(0 0 0 / 10%) !important; }
+  .divide-white\/10 > * + *              { border-color: oklch(0 0 0 / 12%) !important; }
 
   /* ── Hover backgrounds ────────────────────────────────────────────────── */
   .hover\:bg-white\/2:hover              { background-color: oklch(0 0 0 / 3%) !important; }
