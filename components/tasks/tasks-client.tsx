@@ -275,17 +275,19 @@ export function TasksClient({ initialTasks, goals }: Props) {
   }
 
   // A task is "in the selected date range" (for ALL/PENDING/COMPLETED)
+  // Only extend rangeEnd to catch Next Week bleed when the range boundary falls
+  // inside the current week→next-week window. Never extend for past ranges.
+  const nextWeekBleedEnd = (rangeEnd >= thisWeekEnd && rangeEnd < nextWeekEnd) ? nextWeekEnd : rangeEnd
+
   const isInDateRange = (t: Task) => {
     if (t.recurrence === "CUSTOM_DATES") {
       const dates: string[] = JSON.parse(t.customDates || "[]")
-      const effectiveEnd = rangeEnd < nextWeekEnd ? nextWeekEnd : rangeEnd
-      return dates.some(ds => { const d = new Date(ds+"T00:00:00"); return d >= rangeStart && d <= effectiveEnd })
+      return dates.some(ds => { const d = new Date(ds+"T00:00:00"); return d >= rangeStart && d <= nextWeekBleedEnd })
     }
     if (t.recurrence === "DAILY" || t.recurrence === "EVERY_OTHER_DAY") {
       const start = t.startDate ? new Date(t.startDate) : new Date(t.createdAt)
       const end = t.recurrenceEndDate ? new Date(t.recurrenceEndDate) : null
-      const effectiveEnd = rangeEnd < nextWeekEnd ? nextWeekEnd : rangeEnd
-      return start <= effectiveEnd && (end === null || end >= rangeStart)
+      return start <= nextWeekBleedEnd && (end === null || end >= rangeStart)
     }
     const d = t.startDate ? new Date(t.startDate) : t.dueDate ? new Date(t.dueDate) : null
     if (!d) return true
@@ -509,11 +511,18 @@ export function TasksClient({ initialTasks, goals }: Props) {
 
   // ── Filtering ───────────────────────────────────────────────────────────────
 
+  const isCompletedInRange = (t: Task) => {
+    if (!t.completed) return false
+    if (!isRepeating(t.recurrence)) return true
+    const d = new Date(t.updatedAt)
+    return d >= rangeStart && d <= rangeEnd
+  }
+
   // TODAY bypasses date range; ALL/PENDING/COMPLETED respect it
   const filtered = tasks.filter((t) => {
     if (filter === "TODAY") return isScheduledToday(t)
     if (!isInDateRange(t)) return false
-    if (filter === "COMPLETED") return effectiveCompleted(t)
+    if (filter === "COMPLETED") return isCompletedInRange(t)
     if (filter === "PENDING") {
       if (isRepeating(t.recurrence)) return isInRange(t) && !effectiveCompleted(t)
       return !t.completed
@@ -525,7 +534,7 @@ export function TasksClient({ initialTasks, goals }: Props) {
     if (f === "TODAY") return tasks.filter(isActiveToday).length
     const base = tasks.filter(isInDateRange)
     if (f === "ALL") return base.length
-    if (f === "COMPLETED") return base.filter(effectiveCompleted).length
+    if (f === "COMPLETED") return base.filter(isCompletedInRange).length
     if (f === "PENDING")
       return base.filter((t) => {
         if (isRepeating(t.recurrence)) return isInRange(t) && !effectiveCompleted(t)
@@ -930,7 +939,7 @@ export function TasksClient({ initialTasks, goals }: Props) {
             {groupTasks(filtered)
               .filter(([g]) => {
                 if (filter === "TODAY" || filter === "PENDING") return g === "Today"
-                if (filter === "COMPLETED") return g === "Today" || g.startsWith("Completed ")
+                if (filter === "COMPLETED") return g.startsWith("Completed ") || /^[A-Za-z]+ \d{4}$/.test(g)
                 return true
               })
               .map(([groupLabel, groupItems]) => {
