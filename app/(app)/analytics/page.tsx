@@ -3,6 +3,16 @@ import { authOptions } from "@/lib/auth"
 import { getAllTasksAnalytics, getAllGoalsAnalytics, getFocusLogsAnalytics } from "@/lib/queries"
 import { AnalyticsClient } from "@/components/analytics/analytics-client"
 
+// Parse completedSections — handles both string[] and legacy {start,end}[] formats
+function parseCompletedDates(raw: string): string[] {
+  try {
+    const arr = JSON.parse(raw || "[]")
+    if (!Array.isArray(arr) || arr.length === 0) return []
+    if (typeof arr[0] === "string") return arr as string[]
+    return (arr as { start: string }[]).map((e) => e.start?.slice(0, 10)).filter(Boolean)
+  } catch { return [] }
+}
+
 export default async function AnalyticsPage() {
   const session = await getServerSession(authOptions)
   const userId = session!.user.id
@@ -13,10 +23,28 @@ export default async function AnalyticsPage() {
     getFocusLogsAnalytics(userId),
   ])
 
+  // ── Build per-task completion date sets ───────────────────────────────────
+  // A task counts as completed if completed=true OR has any completedSections entries
+  const taskCompletionDates = allTasks.map((t) => {
+    const sections = parseCompletedDates(t.completedSections)
+    const dates = new Set<string>(sections)
+    // Legacy: non-recurring or not yet migrated recurring tasks
+    if (t.completed && dates.size === 0) {
+      dates.add(t.updatedAt.toISOString().slice(0, 10))
+    }
+    return { task: t, dates }
+  })
+
+  const completedTasks = taskCompletionDates.filter(({ dates, task }) => dates.size > 0 || task.completed)
+
   // ── Streak ────────────────────────────────────────────────────────────────
-  const completedTasks = allTasks.filter((t) => t.completed)
   const activityDates = new Set<string>()
-  completedTasks.forEach((t) => activityDates.add(t.updatedAt.toISOString().slice(0, 10)))
+  taskCompletionDates.forEach(({ dates, task }) => {
+    dates.forEach((d) => activityDates.add(d))
+    if (task.completed && dates.size === 0) {
+      activityDates.add(task.updatedAt.toISOString().slice(0, 10))
+    }
+  })
   focusLogs.forEach((f) => activityDates.add(f.createdAt.toISOString().slice(0, 10)))
 
   let streak = 0
@@ -64,16 +92,24 @@ export default async function AnalyticsPage() {
   }))
 
   // ── Tasks completed by day (last 7) ───────────────────────────────────────
+  // Count each recurring occurrence separately (one per completedSections date)
   const tasksByDay = Array.from({ length: 7 }, (_, i) => {
     const start = new Date(todayDate)
     start.setDate(start.getDate() - (6 - i))
     start.setHours(0, 0, 0, 0)
+    const dayStr = start.toISOString().slice(0, 10)
     const end = new Date(start)
     end.setDate(end.getDate() + 1)
-    return {
-      day: start.toLocaleDateString("en-US", { weekday: "short" }),
-      completed: completedTasks.filter((t) => t.updatedAt >= start && t.updatedAt < end).length,
+
+    let count = 0
+    for (const { dates, task } of taskCompletionDates) {
+      if (dates.has(dayStr)) {
+        count++
+      } else if (task.completed && dates.size === 0 && task.updatedAt >= start && task.updatedAt < end) {
+        count++
+      }
     }
+    return { day: start.toLocaleDateString("en-US", { weekday: "short" }), completed: count }
   })
 
   // ── Burnout risk ──────────────────────────────────────────────────────────
