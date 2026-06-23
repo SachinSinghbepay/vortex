@@ -493,11 +493,25 @@ export function TasksClient({ initialTasks, goals }: Props) {
     return false
   }
 
+  // Like isActiveToday but includes completed tasks — used for TODAY filter display
+  const isScheduledToday = (t: Task) => {
+    if (isRepeating(t.recurrence)) return isInRange(t) && !isSectionSkipped(t, todayStart)
+    if (t.startDate && t.dueDate) {
+      const s = new Date(t.startDate), e = new Date(t.dueDate)
+      return s <= todayEnd && e >= todayStart
+    }
+    if (t.dueDate) {
+      const d = new Date(t.dueDate)
+      return d >= todayStart && d < todayEnd
+    }
+    return false
+  }
+
   // ── Filtering ───────────────────────────────────────────────────────────────
 
   // TODAY bypasses date range; ALL/PENDING/COMPLETED respect it
   const filtered = tasks.filter((t) => {
-    if (filter === "TODAY") return isActiveToday(t)
+    if (filter === "TODAY") return isScheduledToday(t)
     if (!isInDateRange(t)) return false
     if (filter === "COMPLETED") return effectiveCompleted(t)
     if (filter === "PENDING") {
