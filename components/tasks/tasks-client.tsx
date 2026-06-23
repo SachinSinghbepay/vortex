@@ -915,7 +915,7 @@ export function TasksClient({ initialTasks, goals }: Props) {
           <div>
             {groupTasks(filtered)
               .filter(([g]) => {
-                if (filter === "TODAY") return g === "Today"
+                if (filter === "TODAY" || filter === "PENDING") return g === "Today"
                 if (filter === "COMPLETED") return g === "Today" || g.startsWith("Completed ")
                 return true
               })
