@@ -913,7 +913,13 @@ export function TasksClient({ initialTasks, goals }: Props) {
           </div>
         ) : (
           <div>
-            {groupTasks(filtered).map(([groupLabel, groupItems]) => {
+            {groupTasks(filtered)
+              .filter(([g]) => {
+                if (filter === "TODAY") return g === "Today"
+                if (filter === "COMPLETED") return g === "Today" || g.startsWith("Completed ")
+                return true
+              })
+              .map(([groupLabel, groupItems]) => {
               const isCompletedGroup = groupLabel.startsWith("Completed ")
               const isOverdue = groupLabel === "Overdue"
               return (
