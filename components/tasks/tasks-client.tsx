@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { toast } from "sonner"
 import { Plus, CheckCircle2, Circle, Trash2, Calendar, Sparkles, Repeat, ChevronDown, ChevronLeft, ChevronRight, Pencil, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -218,17 +218,25 @@ export function TasksClient({ initialTasks, goals }: Props) {
     } catch { /* empty */ }
   }
 
-  const saved = getSavedRange()
-  const initRangeStart = saved?.start ?? defaultRangeStart
-  const initRangeEnd = saved?.end ?? defaultRangeEnd
-
   const [tasks, setTasks] = useState(initialTasks)
   const [filter, setFilter] = useState<(typeof filters)[number]>("ALL")
-  const [rangeStart, setRangeStart] = useState(initRangeStart)
-  const [rangeEnd, setRangeEnd] = useState(initRangeEnd)
+  const [rangeStart, setRangeStart] = useState(defaultRangeStart)
+  const [rangeEnd, setRangeEnd] = useState(defaultRangeEnd)
   const [showRangePicker, setShowRangePicker] = useState(false)
-  const [pickerStart, setPickerStart] = useState(formatDateForInput(initRangeStart))
-  const [pickerEnd, setPickerEnd] = useState(formatDateForInput(initRangeEnd))
+  const [pickerStart, setPickerStart] = useState(formatDateForInput(defaultRangeStart))
+  const [pickerEnd, setPickerEnd] = useState(formatDateForInput(defaultRangeEnd))
+
+  // Load persisted range after hydration to avoid SSR mismatch
+  useEffect(() => {
+    const saved = getSavedRange()
+    if (saved) {
+      setRangeStart(saved.start)
+      setRangeEnd(saved.end)
+      setPickerStart(formatDateForInput(saved.start))
+      setPickerEnd(formatDateForInput(saved.end))
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [showCreate, setShowCreate] = useState(false)
   const [creating, setCreating] = useState(false)
   const [breakdownTask, setBreakdownTask] = useState<Task | null>(null)
