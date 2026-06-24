@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { toast } from "sonner"
-import { Plus, Target, Trash2, Calendar, Sparkles, Shield, Eye } from "lucide-react"
+import { Plus, Target, Trash2, Calendar, Sparkles, Shield, Eye, TrendingUp, CheckCircle2, AlertTriangle, XCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Modal } from "@/components/ui/modal"
 import { DecomposeModal } from "@/components/ai/decompose-modal"
@@ -49,11 +49,125 @@ const inputCls =
   "w-full rounded-lg border border-white/[0.07] bg-white/4 px-3.5 py-2.5 text-sm text-white placeholder-white/20 outline-none transition focus:border-violet-500/40 focus:bg-white/[0.07]"
 
 const selectCls =
-  "w-full rounded-lg border border-white/[0.07] bg-[#1a1a1a] px-3.5 py-2.5 text-sm text-white outline-none"
+  "w-full rounded-lg border border-white/[0.07] bg-[#1a1a1a] px-3.5 py-2.5 text-sm text-white outline-none scheme-dark"
+
+// ─── Prediction Viewer ───────────────────────────────────────────────────────
+
+const statusBadge: Record<string, { label: string; cls: string; Icon: React.ComponentType<{ className?: string }> }> = {
+  ahead:    { label: "Ahead of Schedule", cls: "border-emerald-500/30 bg-emerald-500/10 text-emerald-400", Icon: CheckCircle2 },
+  on_track: { label: "On Track",          cls: "border-blue-500/30 bg-blue-500/10 text-blue-400",         Icon: CheckCircle2 },
+  behind:   { label: "Behind Schedule",   cls: "border-amber-500/30 bg-amber-500/10 text-amber-400",      Icon: AlertTriangle },
+  at_risk:  { label: "At Risk",           cls: "border-red-500/30 bg-red-500/10 text-red-400",            Icon: XCircle },
+}
+
+const actionLabel: Record<string, string> = {
+  continue:           "Keep going",
+  increase_frequency: "Increase frequency",
+  extend_deadline:    "Extend deadline",
+  reduce_scope:       "Reduce scope",
+  focus_bottleneck:   "Focus on bottleneck",
+}
+
+function PredictionViewer({ data }: { data: Record<string, unknown> }) {
+  const probability = typeof data.probability === "number" ? data.probability : 0
+  const status = typeof data.status === "string" ? data.status : "on_track"
+  const badge = statusBadge[status] ?? statusBadge.on_track
+  const { Icon } = badge
+
+  const probColor =
+    probability >= 70 ? "text-emerald-400" :
+    probability >= 40 ? "text-amber-400"   :
+                        "text-red-400"
+
+  const insights = Array.isArray(data.insights) ? (data.insights as unknown[]).map(String) : []
+  const action = typeof data.action === "string" ? data.action : null
+  const revisedDeadline = typeof data.revisedDeadline === "string" ? data.revisedDeadline : null
+  const bottleneck = typeof data.bottleneckCategory === "string" ? data.bottleneckCategory : null
+
+  return (
+    <div className="space-y-4">
+      {/* Probability */}
+      <div className="flex items-center gap-4 rounded-xl border border-white/8 bg-white/3 px-5 py-4">
+        <span className={`text-5xl font-bold tabular-nums ${probColor}`}>{probability}%</span>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[11px] uppercase tracking-widest text-white/30">Achievement probability</span>
+          <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${badge.cls}`}>
+            <Icon className="h-3 w-3" />
+            {badge.label}
+          </span>
+        </div>
+      </div>
+
+      {/* Summary */}
+      {!!data.summary && (
+        <p className="text-sm leading-relaxed text-white/60">{String(data.summary)}</p>
+      )}
+
+      {/* Insights */}
+      {insights.length > 0 && (
+        <div>
+          <p className="mb-2 text-[11px] font-medium uppercase tracking-widest text-white/30">Insights</p>
+          <ul className="space-y-1.5">
+            {insights.map((ins, i) => (
+              <li key={i} className="flex items-start gap-2 text-xs text-white/55">
+                <span className="mt-0.5 text-violet-400">✦</span>{ins}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Recommendation */}
+      {!!data.recommendation && (
+        <div className="rounded-lg border border-violet-500/20 bg-violet-500/5 px-4 py-3">
+          <p className="mb-1 text-[11px] font-medium uppercase tracking-widest text-violet-400/60">Recommendation</p>
+          <p className="text-sm text-violet-300">{String(data.recommendation)}</p>
+          {action && actionLabel[action] && (
+            <span className="mt-2 inline-block rounded-full border border-violet-500/30 bg-violet-500/10 px-2.5 py-0.5 text-[11px] text-violet-400">
+              {actionLabel[action]}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Revised deadline / bottleneck */}
+      {(revisedDeadline || bottleneck) && (
+        <div className="flex flex-wrap gap-3">
+          {revisedDeadline && (
+            <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3.5 py-2.5">
+              <p className="text-[10px] uppercase tracking-widest text-amber-400/60">Suggested deadline</p>
+              <p className="mt-0.5 text-sm font-medium text-amber-300">{revisedDeadline}</p>
+            </div>
+          )}
+          {bottleneck && (
+            <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-3.5 py-2.5">
+              <p className="text-[10px] uppercase tracking-widest text-red-400/60">Bottleneck</p>
+              <p className="mt-0.5 text-sm font-medium text-red-300">{bottleneck}</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 // ─── Analysis Viewer ─────────────────────────────────────────────────────────
 
-function AnalysisViewer({ data }: { data: Record<string, unknown> }) {
+function AnalysisViewer({ data, onSaveTasks }: {
+  data: Record<string, unknown>
+  onSaveTasks?: (tasks: string[], title: string, index: number) => Promise<void>
+}) {
+  const [saved, setSaved] = useState<number[]>([])
+  const [saving, setSaving] = useState<number | null>(null)
+
+  const handleSave = async (tasks: string[], title: string, index: number) => {
+    if (!onSaveTasks || saved.includes(index)) return
+    setSaving(index)
+    await onSaveTasks(tasks, title, index)
+    setSaved((p) => [...p, index])
+    setSaving(null)
+  }
+
   const isStudyPlan = data._type === "STUDY_PLAN"
 
   if (isStudyPlan) {
@@ -72,7 +186,18 @@ function AnalysisViewer({ data }: { data: Record<string, unknown> }) {
             <p className="text-[11px] font-medium uppercase tracking-widest text-white/30">Weekly Plan</p>
             {weeklyPlan.map((w, i) => (
               <div key={i} className="rounded-xl border border-white/8 bg-white/3 p-4">
-                <p className="mb-2 text-sm font-medium text-white">Week {w.week} <span className="text-xs text-white/35">{w.focus}</span></p>
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium text-white">Week {w.week} <span className="text-xs text-white/35">{w.focus}</span></p>
+                  {onSaveTasks && (w.dailyTasks ?? []).length > 0 && (
+                    <button
+                      onClick={() => handleSave(w.dailyTasks ?? [], `Week ${w.week} – ${w.focus}`, i)}
+                      disabled={saved.includes(i) || saving === i}
+                      className="shrink-0 text-[11px] text-violet-400 hover:text-violet-300 disabled:text-white/25 transition"
+                    >
+                      {saved.includes(i) ? "✓ Saved" : saving === i ? "Saving…" : "+ Add to Tasks"}
+                    </button>
+                  )}
+                </div>
                 {(w.dailyTasks ?? []).length > 0 && (
                   <ul className="space-y-1">
                     {(w.dailyTasks ?? []).map((t, j) => (
@@ -115,7 +240,18 @@ function AnalysisViewer({ data }: { data: Record<string, unknown> }) {
       )}
       {milestones.map((m, i) => (
         <div key={i} className="rounded-xl border border-white/8 bg-white/3 p-4">
-          <p className="mb-2 text-sm font-medium text-white">{m.title} <span className="text-xs text-white/35">{m.duration}</span></p>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-sm font-medium text-white">{m.title} <span className="text-xs text-white/35">{m.duration}</span></p>
+            {onSaveTasks && m.tasks.length > 0 && (
+              <button
+                onClick={() => handleSave(m.tasks, m.title, i)}
+                disabled={saved.includes(i) || saving === i}
+                className="shrink-0 text-[11px] text-violet-400 hover:text-violet-300 disabled:text-white/25 transition"
+              >
+                {saved.includes(i) ? "✓ Saved" : saving === i ? "Saving…" : "+ Add to Tasks"}
+              </button>
+            )}
+          </div>
           <ul className="space-y-1">
             {m.tasks.map((t, j) => (
               <li key={j} className="flex items-start gap-2 text-xs text-white/55">
@@ -152,6 +288,10 @@ export function GoalsClient({ initialGoals }: { initialGoals: Goal[] }) {
   const [analysisResult, setAnalysisResult] = useState<Record<string, unknown> | null>(null)
   const [analysisLoading, setAnalysisLoading] = useState(false)
 
+  const [predictionGoal, setPredictionGoal] = useState<Goal | null>(null)
+  const [predictionResult, setPredictionResult] = useState<Record<string, unknown> | null>(null)
+  const [predictionLoading, setPredictionLoading] = useState(false)
+
   const handleViewAnalysis = async (goal: Goal) => {
     setAnalysisGoal(goal)
     setAnalysisResult(null)
@@ -162,6 +302,19 @@ export function GoalsClient({ initialGoals }: { initialGoals: Goal[] }) {
       else setAnalysisResult({ error: "No AI analysis saved for this goal yet. Use 'Decompose with AI' first." })
     } finally {
       setAnalysisLoading(false)
+    }
+  }
+
+  const handlePredict = async (goal: Goal) => {
+    setPredictionGoal(goal)
+    setPredictionResult(null)
+    setPredictionLoading(true)
+    try {
+      const res = await fetch(`/api/goals/${goal.id}/prediction`)
+      if (res.ok) setPredictionResult(await res.json())
+      else setPredictionResult({ error: "Failed to generate prediction. Try again." })
+    } finally {
+      setPredictionLoading(false)
     }
   }
   const [form, setForm] = useState({
@@ -213,9 +366,8 @@ export function GoalsClient({ initialGoals }: { initialGoals: Goal[] }) {
     toast.success(`Progress updated to ${progress}%`)
   }
 
-  const handleSaveTasks = async (tasks: string[], milestoneTitle: string, milestoneIndex = 0) => {
+  const handleSaveTasks = async (tasks: string[], milestoneTitle: string, milestoneIndex = 0, goalId?: string) => {
     const today = new Date()
-    // Each milestone = ~2 weeks: milestone 0 = week 1-2, milestone 1 = week 3-4, etc.
     const startDate = new Date(today)
     startDate.setDate(today.getDate() + milestoneIndex * 14)
     const dueDate = new Date(today)
@@ -232,10 +384,12 @@ export function GoalsClient({ initialGoals }: { initialGoals: Goal[] }) {
             category: milestoneTitle,
             startDate: startDate.toISOString(),
             dueDate: dueDate.toISOString(),
+            ...(goalId && { goalId }),
           }),
         })
       )
     )
+    toast.success(`${tasks.length} task${tasks.length !== 1 ? "s" : ""} added`)
   }
 
   const handleStatus = async (id: string, status: GoalStatus) => {
@@ -384,10 +538,10 @@ export function GoalsClient({ initialGoals }: { initialGoals: Goal[] }) {
                     onChange={(e) => handleStatus(goal.id, e.target.value as GoalStatus)}
                     className="cursor-pointer rounded bg-transparent text-[10px] text-white/25 outline-none hover:text-white/50 scheme-dark"
                   >
-                    <option value="ACTIVE">Active</option>
-                    <option value="COMPLETED">Completed</option>
-                    <option value="PAUSED">Paused</option>
-                    <option value="FAILED">Failed</option>
+                    <option value="ACTIVE" className="bg-[#1a1a1a] text-white">Active</option>
+                    <option value="COMPLETED" className="bg-[#1a1a1a] text-white">Completed</option>
+                    <option value="PAUSED" className="bg-[#1a1a1a] text-white">Paused</option>
+                    <option value="FAILED" className="bg-[#1a1a1a] text-white">Failed</option>
                   </select>
                 </div>
 
@@ -406,6 +560,13 @@ export function GoalsClient({ initialGoals }: { initialGoals: Goal[] }) {
                     className="flex items-center justify-center gap-1 rounded-lg border border-white/8 bg-white/3 px-2.5 py-1.5 text-[11px] text-white/35 transition hover:bg-white/6 hover:text-white/60"
                   >
                     <Eye className="h-3 w-3" />
+                  </button>
+                  <button
+                    onClick={() => handlePredict(goal)}
+                    title="Predict goal achievement"
+                    className="flex items-center justify-center gap-1 rounded-lg border border-white/8 bg-white/3 px-2.5 py-1.5 text-[11px] text-white/35 transition hover:bg-violet-500/20 hover:text-violet-400"
+                  >
+                    <TrendingUp className="h-3 w-3" />
                   </button>
                 </div>
               </motion.div>
@@ -440,20 +601,20 @@ export function GoalsClient({ initialGoals }: { initialGoals: Goal[] }) {
             <div className="space-y-1.5">
               <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Type</label>
               <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as GoalType })} className={selectCls}>
-                <option value="PERSONAL">Personal</option>
-                <option value="LEARNING">Learning</option>
-                <option value="FITNESS">Fitness</option>
-                <option value="CAREER">Career</option>
-                <option value="CUSTOM">Custom</option>
+                <option value="PERSONAL" className="bg-[#1a1a1a] text-white">Personal</option>
+                <option value="LEARNING" className="bg-[#1a1a1a] text-white">Learning</option>
+                <option value="FITNESS" className="bg-[#1a1a1a] text-white">Fitness</option>
+                <option value="CAREER" className="bg-[#1a1a1a] text-white">Career</option>
+                <option value="CUSTOM" className="bg-[#1a1a1a] text-white">Custom</option>
               </select>
             </div>
             <div className="space-y-1.5">
               <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Priority</label>
               <select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value as Priority })} className={selectCls}>
-                <option value="LOW">Low</option>
-                <option value="MEDIUM">Medium</option>
-                <option value="HIGH">High</option>
-                <option value="URGENT">Urgent</option>
+                <option value="LOW" className="bg-[#1a1a1a] text-white">Low</option>
+                <option value="MEDIUM" className="bg-[#1a1a1a] text-white">Medium</option>
+                <option value="HIGH" className="bg-[#1a1a1a] text-white">High</option>
+                <option value="URGENT" className="bg-[#1a1a1a] text-white">Urgent</option>
               </select>
             </div>
           </div>
@@ -482,7 +643,7 @@ export function GoalsClient({ initialGoals }: { initialGoals: Goal[] }) {
           open={!!decomposeGoal}
           onClose={() => setDecomposeGoal(null)}
           goal={decomposeGoal}
-          onSaveTasks={handleSaveTasks}
+          onSaveTasks={(tasks, title, idx) => handleSaveTasks(tasks, title, idx, decomposeGoal.id)}
           onDecomposed={() =>
             setGoals((p) =>
               p.map((g) => (g.id === decomposeGoal.id ? { ...g, hasAnalysis: true } : g))
@@ -510,7 +671,29 @@ export function GoalsClient({ initialGoals }: { initialGoals: Goal[] }) {
             {String(analysisResult.error)}
           </div>
         ) : analysisResult ? (
-          <AnalysisViewer data={analysisResult} />
+          <AnalysisViewer data={analysisResult} onSaveTasks={(tasks, title, idx) => handleSaveTasks(tasks, title, idx, analysisGoal!.id)} />
+        ) : null}
+      </Modal>
+
+      {/* Goal Prediction */}
+      <Modal
+        open={!!predictionGoal}
+        onClose={() => { setPredictionGoal(null); setPredictionResult(null) }}
+        title={`Goal Prediction — ${predictionGoal?.title ?? ""}`}
+      >
+        {predictionLoading ? (
+          <div className="space-y-3 py-2">
+            <div className="flex items-center gap-3 rounded-lg border border-violet-500/20 bg-violet-500/5 px-4 py-3">
+              <span className="animate-spin text-violet-400">⟳</span>
+              <p className="text-sm text-white/50">Analysing your task history and deadline…</p>
+            </div>
+          </div>
+        ) : predictionResult && "error" in predictionResult ? (
+          <div className="rounded-lg border border-white/8 bg-white/3 px-4 py-6 text-center text-sm text-white/40">
+            {String(predictionResult.error)}
+          </div>
+        ) : predictionResult ? (
+          <PredictionViewer data={predictionResult} />
         ) : null}
       </Modal>
     </PageTransition>

@@ -3,6 +3,10 @@ import { authOptions } from "@/lib/auth"
 import { getAllTasksAnalytics, getAllGoalsAnalytics, getFocusLogsAnalytics } from "@/lib/queries"
 import { AnalyticsClient } from "@/components/analytics/analytics-client"
 
+function toLocalDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+}
+
 // Parse completedSections — handles both string[] and legacy {start,end}[] formats
 function parseCompletedDates(raw: string): string[] {
   try {
@@ -24,13 +28,11 @@ export default async function AnalyticsPage() {
   ])
 
   // ── Build per-task completion date sets ───────────────────────────────────
-  // A task counts as completed if completed=true OR has any completedSections entries
   const taskCompletionDates = allTasks.map((t) => {
     const sections = parseCompletedDates(t.completedSections)
     const dates = new Set<string>(sections)
-    // Legacy: non-recurring or not yet migrated recurring tasks
     if (t.completed && dates.size === 0) {
-      dates.add(t.updatedAt.toISOString().slice(0, 10))
+      dates.add(toLocalDateStr(t.updatedAt))
     }
     return { task: t, dates }
   })
@@ -42,17 +44,17 @@ export default async function AnalyticsPage() {
   taskCompletionDates.forEach(({ dates, task }) => {
     dates.forEach((d) => activityDates.add(d))
     if (task.completed && dates.size === 0) {
-      activityDates.add(task.updatedAt.toISOString().slice(0, 10))
+      activityDates.add(toLocalDateStr(task.updatedAt))
     }
   })
-  focusLogs.forEach((f) => activityDates.add(f.createdAt.toISOString().slice(0, 10)))
+  focusLogs.forEach((f) => activityDates.add(toLocalDateStr(f.createdAt)))
 
   let streak = 0
   const todayDate = new Date()
   for (let i = 0; i < 60; i++) {
     const d = new Date(todayDate)
     d.setDate(d.getDate() - i)
-    if (activityDates.has(d.toISOString().slice(0, 10))) streak++
+    if (activityDates.has(toLocalDateStr(d))) streak++
     else break
   }
 
@@ -92,12 +94,11 @@ export default async function AnalyticsPage() {
   }))
 
   // ── Tasks completed by day (last 7) ───────────────────────────────────────
-  // Count each recurring occurrence separately (one per completedSections date)
   const tasksByDay = Array.from({ length: 7 }, (_, i) => {
     const start = new Date(todayDate)
     start.setDate(start.getDate() - (6 - i))
     start.setHours(0, 0, 0, 0)
-    const dayStr = start.toISOString().slice(0, 10)
+    const dayStr = toLocalDateStr(start)
     const end = new Date(start)
     end.setDate(end.getDate() + 1)
 

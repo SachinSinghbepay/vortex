@@ -188,10 +188,13 @@ export function TasksClient({ initialTasks, goals }: Props) {
   todayEnd.setDate(todayEnd.getDate() + 1)
   const tomorrowEnd = new Date(todayEnd)
   tomorrowEnd.setDate(tomorrowEnd.getDate() + 1)
+  // Calendar Mon–Sun weeks: thisWeekEnd = next Monday, nextWeekEnd = Monday after that
+  const dow = todayStart.getDay() // 0=Sun … 6=Sat
+  const daysToNextMonday = ((8 - dow) % 7) || 7
   const thisWeekEnd = new Date(todayStart)
-  thisWeekEnd.setDate(thisWeekEnd.getDate() + 7)
+  thisWeekEnd.setDate(todayStart.getDate() + daysToNextMonday)
   const nextWeekEnd = new Date(thisWeekEnd)
-  nextWeekEnd.setDate(nextWeekEnd.getDate() + 7)
+  nextWeekEnd.setDate(thisWeekEnd.getDate() + 7)
 
   // Date range — default to current month, persisted in localStorage
   const defaultRangeStart = new Date(now.getFullYear(), now.getMonth(), 1)
@@ -294,10 +297,10 @@ export function TasksClient({ initialTasks, goals }: Props) {
       return dates.some(ds => { const d = new Date(ds+"T00:00:00"); return d >= rangeStart && d <= nextWeekBleedEnd })
     }
     if (t.recurrence === "DAILY" || t.recurrence === "EVERY_OTHER_DAY") {
-      const start = t.startDate ? new Date(t.startDate) : new Date(t.createdAt)
-      const end = t.recurrenceEndDate ? new Date(t.recurrenceEndDate) : null
+      const start = localDay(new Date(t.startDate ?? t.createdAt))
+      const end = t.recurrenceEndDate ? localDay(new Date(t.recurrenceEndDate)) : null
       // Only bleed into next week if task already starts within the range
-      const bleedEnd = start <= rangeEnd ? nextWeekBleedEnd : rangeEnd
+      const bleedEnd = start < nextWeekBleedEnd ? nextWeekBleedEnd : rangeEnd
       return start <= bleedEnd && (end === null || end >= rangeStart)
     }
     const d = t.startDate ? new Date(t.startDate) : t.dueDate ? new Date(t.dueDate) : null
@@ -398,8 +401,11 @@ export function TasksClient({ initialTasks, goals }: Props) {
     return t.recurrence === "EVERY_OTHER_DAY" ? `every 2 days${until}` : `every day${until}`
   }
 
+  // Normalize UTC-midnight DB dates to local midnight (fixes UTC+5:30 offset shifting dates by 5h30m)
+  const localDay = (d: Date): Date => { const r = new Date(d); r.setHours(0, 0, 0, 0); return r }
+
   const getTaskDate = (t: Task) =>
-    t.startDate ? new Date(t.startDate) : t.dueDate ? new Date(t.dueDate) : null
+    t.startDate ? localDay(new Date(t.startDate)) : t.dueDate ? localDay(new Date(t.dueDate)) : null
 
   // ── Grouping ────────────────────────────────────────────────────────────────
 
@@ -448,8 +454,8 @@ export function TasksClient({ initialTasks, goals }: Props) {
     }
 
     // ── DAILY / EVERY_OTHER_DAY ──
-    const start = t.startDate ? new Date(t.startDate) : new Date(t.createdAt)
-    const end = t.recurrenceEndDate ? new Date(t.recurrenceEndDate) : null
+    const start = localDay(new Date(t.startDate ?? t.createdAt))
+    const end = t.recurrenceEndDate ? localDay(new Date(t.recurrenceEndDate)) : null
 
     const activeIn = (sectionStart: Date, sectionEnd: Date) => {
       if (isSectionSkipped(t, sectionStart)) return false
@@ -567,12 +573,12 @@ export function TasksClient({ initialTasks, goals }: Props) {
           const d = t.dueDate ? new Date(t.dueDate) : t.startDate ? new Date(t.startDate) : null
           active = !!(d && d >= cur && d < dayEnd)
         } else if (t.recurrence === "DAILY") {
-          const s = t.startDate ? new Date(t.startDate) : new Date(t.createdAt)
-          const e = t.recurrenceEndDate ? new Date(t.recurrenceEndDate) : null
+          const s = localDay(new Date(t.startDate ?? t.createdAt))
+          const e = t.recurrenceEndDate ? localDay(new Date(t.recurrenceEndDate)) : null
           active = s <= cur && (e === null || e >= cur) && !isSectionSkipped(t, cur)
         } else if (t.recurrence === "EVERY_OTHER_DAY") {
-          const s = t.startDate ? new Date(t.startDate) : new Date(t.createdAt)
-          const e = t.recurrenceEndDate ? new Date(t.recurrenceEndDate) : null
+          const s = localDay(new Date(t.startDate ?? t.createdAt))
+          const e = t.recurrenceEndDate ? localDay(new Date(t.recurrenceEndDate)) : null
           if (s <= cur && (e === null || e >= cur) && !isSectionSkipped(t, cur)) {
             const diff = Math.round((cur.getTime() - s.getTime()) / 86400000)
             active = diff % 2 === 0

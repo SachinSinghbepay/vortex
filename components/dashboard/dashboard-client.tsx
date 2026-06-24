@@ -15,8 +15,6 @@ const priorityColor: Record<string, string> = {
   LOW: "bg-white/20",
 }
 
-const weekDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-const mockActivity = [40, 65, 30, 80, 55, 20, 70]
 
 interface Props {
   user: { name?: string | null }
@@ -42,6 +40,7 @@ interface Props {
   streak: number
   quote: { text: string; author: string }
   procrastinatedTasks: Array<{ id: string; title: string; priority: string; daysAvoided: number }>
+  weeklyActivity: number[]
 }
 
 const statCards = (s: Props["stats"]) => [
@@ -162,7 +161,7 @@ function MITWidget() {
   )
 }
 
-export function DashboardClient({ user, goals, tasksDueToday, stats, streak, quote, procrastinatedTasks }: Props) {
+export function DashboardClient({ user, goals, tasksDueToday, stats, streak, quote, procrastinatedTasks, weeklyActivity }: Props) {
   const hour = new Date().getHours()
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening"
   const firstName = user.name?.split(" ")[0] ?? "there"
@@ -311,18 +310,23 @@ export function DashboardClient({ user, goals, tasksDueToday, stats, streak, quo
           </div>
           <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-5">
             <div className="flex h-28 items-end gap-2">
-              {mockActivity.map((val, i) => (
-                <div key={i} className="flex flex-1 flex-col items-center gap-1.5">
-                  <div
-                    className="w-full rounded-t-sm bg-violet-500/40 transition-all hover:bg-violet-500/70"
-                    style={{ height: `${val}%` }}
-                  />
-                  <span className="text-[10px] text-white/25">{weekDays[i]}</span>
-                </div>
-              ))}
+              {weeklyActivity.map((val, i) => {
+                const d = new Date()
+                d.setDate(d.getDate() - (6 - i))
+                const dayLabel = d.toLocaleDateString("en-US", { weekday: "short" })
+                return (
+                  <div key={i} className="flex flex-1 flex-col items-center gap-1.5">
+                    <div
+                      className="w-full rounded-t-sm bg-violet-500/40 transition-all hover:bg-violet-500/70"
+                      style={{ height: `${Math.max(val * 0.9, 4)}px` }}
+                    />
+                    <span className="text-[10px] text-white/25">{dayLabel}</span>
+                  </div>
+                )
+              })}
             </div>
             <p className="mt-4 text-xs text-white/25">
-              Log focus sessions to see real data
+              Tasks completed this week
             </p>
           </div>
         </div>
