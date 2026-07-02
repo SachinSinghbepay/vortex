@@ -252,6 +252,7 @@ export function TasksClient({ initialTasks, goals }: Props) {
   const [formCustomDates, setFormCustomDates] = useState<string[]>([])
   const [editCustomDates, setEditCustomDates] = useState<string[]>([])
   const [expandedWeeks, setExpandedWeeks] = useState<Set<string>>(new Set())
+  const [overdueExpanded, setOverdueExpanded] = useState(false)
 
   // ── Date range helpers ──────────────────────────────────────────────────────
 
@@ -594,6 +595,36 @@ export function TasksClient({ initialTasks, goals }: Props) {
       }
     }
     return Array.from(map.entries()).sort(([a], [b]) => a < b ? -1 : 1)
+  }
+
+  // Returns missed occurrences grouped by date (current month, oldest→newest)
+  const getOverdueEntries = (): [string, TaskEntry[]][] => {
+    const map = new Map<string, TaskEntry[]>()
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+    let cur = new Date(monthStart)
+    while (cur < todayStart) {
+      const dayStr = formatDateForInput(cur)
+      for (const t of tasks) {
+        if (!isRepeating(t.recurrence)) continue
+        const start = localDay(new Date(t.startDate ?? t.createdAt))
+        const end = t.recurrenceEndDate ? localDay(new Date(t.recurrenceEndDate)) : null
+        if (start > cur || (end && end < cur) || isSectionSkipped(t, cur)) continue
+        let activeOnDay = false
+        if (t.recurrence === "DAILY") {
+          activeOnDay = true
+        } else if (t.recurrence === "EVERY_OTHER_DAY") {
+          activeOnDay = Math.round((cur.getTime() - start.getTime()) / 86400000) % 2 === 0
+        } else if (t.recurrence === "CUSTOM_DATES") {
+          try { activeOnDay = (JSON.parse(t.customDates || "[]") as string[]).includes(dayStr) } catch { /* empty */ }
+        }
+        if (!activeOnDay) continue
+        if (parseCompletedDates(t).includes(dayStr)) continue
+        if (!map.has(dayStr)) map.set(dayStr, [])
+        map.get(dayStr)!.push({ ...t, _group: dayStr })
+      }
+      cur = new Date(cur.getTime() + 86400000)
+    }
+    return Array.from(map.entries()).sort(([a], [b]) => b > a ? 1 : -1) // newest first
   }
 
   const isScheduledToday = (t: Task) => {
@@ -1142,6 +1173,45 @@ export function TasksClient({ initialTasks, goals }: Props) {
           </div>
         ) : (
           <div className="divide-y divide-white/10">
+            {/* ── Overdue recurring tasks (current month only, ALL tab) ── */}
+            {filter === "ALL" && (() => {
+              const overdueGroups = getOverdueEntries()
+              const totalCount = overdueGroups.reduce((s, [, items]) => s + items.length, 0)
+              if (totalCount === 0) return null
+              const showContent = totalCount <= 5 || overdueExpanded
+              return (
+                <div className="border-b border-white/10">
+                  <div className="flex items-center gap-2 px-4 py-2 text-[11px] font-semibold uppercase tracking-widest text-red-400/70">
+                    <span className="text-red-400">!</span>
+                    Overdue
+                    <span className="font-normal normal-case tracking-normal text-white/15">{totalCount}</span>
+                    {totalCount > 5 && (
+                      <button
+                        onClick={() => setOverdueExpanded(p => !p)}
+                        className="ml-auto text-white/40 transition hover:text-white/70"
+                      >
+                        <ChevronDown className={cn("h-4 w-4 transition-transform", overdueExpanded && "rotate-180")} />
+                      </button>
+                    )}
+                  </div>
+                  {showContent && (
+                    <div className="divide-y divide-white/8">
+                      {overdueGroups.map(([dayStr, dayItems]) => (
+                        <div key={dayStr}>
+                          <div className="flex items-center gap-2 px-4 py-1.5 text-[10px] font-medium uppercase tracking-widest text-white/20">
+                            <span className="pl-7">{new Date(dayStr + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</span>
+                            <span className="text-white/10">{dayItems.length}</span>
+                          </div>
+                          <ul>
+                            {dayItems.map(task => renderTaskLi(task, false))}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
             {displayGroups
               .map(([groupLabel, groupItems]) => {
               const isCompletedView = filter === "COMPLETED"
