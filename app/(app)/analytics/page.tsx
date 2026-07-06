@@ -1,5 +1,6 @@
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
+import { db } from "@/lib/db"
 import { getAllTasksAnalytics, getAllGoalsAnalytics, getFocusLogsAnalytics } from "@/lib/queries"
 import { AnalyticsClient } from "@/components/analytics/analytics-client"
 
@@ -21,10 +22,11 @@ export default async function AnalyticsPage() {
   const session = await getServerSession(authOptions)
   const userId = session!.user.id
 
-  const [allTasks, goals, focusLogs] = await Promise.all([
+  const [allTasks, goals, focusLogs, currentUser] = await Promise.all([
     getAllTasksAnalytics(userId),
     getAllGoalsAnalytics(userId),
     getFocusLogsAnalytics(userId),
+    db.user.findUnique({ where: { id: userId }, select: { schedule: true } }),
   ])
 
   // ── Build per-task completion date sets ───────────────────────────────────
@@ -123,9 +125,27 @@ export default async function AnalyticsPage() {
   const burnoutLevel = burnoutScore >= 70 ? "HIGH" : burnoutScore >= 40 ? "MEDIUM" : "LOW"
 
   // ── Serialize goals ───────────────────────────────────────────────────────
-  const activeGoals = goals
-    .filter((g) => g.status === "ACTIVE")
-    .map((g) => ({ title: g.title, progress: g.progress, type: g.type }))
+  const activeGoalsRaw = goals.filter((g) => g.status === "ACTIVE")
+  const activeGoals = activeGoalsRaw.map((g) => ({ title: g.title, progress: g.progress, type: g.type }))
+  const scheduleGoals = activeGoalsRaw.map((g) => ({ id: g.id, title: g.title, description: g.description ?? null, type: g.type }))
+
+  // ── Parse saved schedule (handles both old flat format and new activities/habits format) ──
+  type ActivityRow = { name: string; Mon: number; Tue: number; Wed: number; Thu: number; Fri: number; Sat: number; Sun: number }
+  type GoalSchedule = { title: string; activities: ActivityRow[]; habits: { name: string; target: string }[] }
+  let savedSchedule: Record<string, GoalSchedule> = {}
+  try {
+    const raw = JSON.parse(currentUser?.schedule ?? "{}")
+    for (const [goalId, entry] of Object.entries(raw)) {
+      const e = entry as Record<string, unknown>
+      if (Array.isArray(e.activities)) {
+        savedSchedule[goalId] = e as unknown as GoalSchedule
+      } else if (typeof e.Mon === "number" || typeof e.Tue === "number") {
+        // legacy flat format — convert to new structure
+        const { title, Mon = 0, Tue = 0, Wed = 0, Thu = 0, Fri = 0, Sat = 0, Sun = 0 } = e as { title: string } & Record<string, number>
+        savedSchedule[goalId] = { title, activities: [{ name: title, Mon, Tue, Wed, Thu, Fri, Sat, Sun }], habits: [] }
+      }
+    }
+  } catch { /* empty */ }
 
   return (
     <AnalyticsClient
@@ -142,6 +162,8 @@ export default async function AnalyticsPage() {
       activeGoals={activeGoals}
       totalTasks={allTasks.length}
       completedTasks={completedTasks.length}
+      scheduleGoals={scheduleGoals}
+      savedSchedule={savedSchedule}
     />
   )
 }

@@ -103,7 +103,7 @@ export const getAllGoalsAnalytics = (userId: string) =>
   unstable_cache(
     () => db.goal.findMany({
       where: { userId },
-      select: { id: true, title: true, progress: true, status: true, type: true },
+      select: { id: true, title: true, description: true, progress: true, status: true, type: true },
       orderBy: { createdAt: "desc" },
     }),
     ["goals-analytics", userId],
