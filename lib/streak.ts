@@ -4,7 +4,14 @@ function toLocalDateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
 }
 
-export async function getUserStreak(userId: string): Promise<number> {
+export type StreakStatus = "active" | "grace" | "lost"
+
+export type StreakResult = {
+  streak: number
+  status: StreakStatus
+}
+
+export async function getUserStreak(userId: string): Promise<StreakResult> {
   const sixtyDaysAgo = new Date()
   sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60)
   const sixtyDaysAgoStr = toLocalDateStr(sixtyDaysAgo)
@@ -39,14 +46,33 @@ export async function getUserStreak(userId: string): Promise<number> {
 
   focusLogs.forEach((f) => activityDates.add(toLocalDateStr(f.createdAt)))
 
-  let streak = 0
   const today = new Date()
-  for (let i = 0; i < 60; i++) {
+  const todayStr = toLocalDateStr(today)
+  const yesterday = new Date(today)
+  yesterday.setDate(today.getDate() - 1)
+  const yesterdayStr = toLocalDateStr(yesterday)
+
+  const hasToday = activityDates.has(todayStr)
+  const hasYesterday = activityDates.has(yesterdayStr)
+
+  // Neither today nor yesterday → streak is gone
+  if (!hasToday && !hasYesterday) {
+    return { streak: 0, status: "lost" }
+  }
+
+  // Count consecutive completed days from yesterday backwards
+  let streakFromYesterday = 0
+  for (let i = 1; i <= 60; i++) {
     const d = new Date(today)
-    d.setDate(d.getDate() - i)
-    if (activityDates.has(toLocalDateStr(d))) streak++
+    d.setDate(today.getDate() - i)
+    if (activityDates.has(toLocalDateStr(d))) streakFromYesterday++
     else break
   }
 
-  return streak
+  if (hasToday) {
+    return { streak: streakFromYesterday + 1, status: "active" }
+  }
+
+  // hasYesterday but not today → grace period
+  return { streak: streakFromYesterday, status: "grace" }
 }

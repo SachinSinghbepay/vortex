@@ -1,12 +1,13 @@
 "use client"
 
 import { useState } from "react"
-import { Target, CheckSquare, TrendingUp, Zap, Plus, ArrowRight, Sparkles, Loader2 } from "lucide-react"
+import { Target, CheckSquare, TrendingUp, Zap, Plus, ArrowRight, Sparkles, Loader2, AlertTriangle } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { ProcrastinationRadar } from "@/components/dashboard/procrastination-radar"
 import { cn } from "@/lib/utils"
 import { PageTransition } from "@/components/ui/page-transition"
+import type { StreakStatus } from "@/lib/streak"
 
 const priorityColor: Record<string, string> = {
   URGENT: "bg-red-500",
@@ -38,6 +39,7 @@ interface Props {
     focusScore: number
   }
   streak: number
+  streakStatus: StreakStatus
   quote: { text: string; author: string }
   procrastinatedTasks: Array<{ id: string; title: string; priority: string; daysAvoided: number }>
   weeklyActivity: number[]
@@ -161,11 +163,11 @@ function MITWidget() {
   )
 }
 
-export function DashboardClient({ user, goals, tasksDueToday, stats, streak, quote, procrastinatedTasks, weeklyActivity }: Props) {
+export function DashboardClient({ user, goals, tasksDueToday, stats, streak, streakStatus, quote, procrastinatedTasks, weeklyActivity }: Props) {
   const hour = new Date().getHours()
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening"
   const firstName = user.name?.split(" ")[0] ?? "there"
-  const streakEmoji = streak >= 30 ? "🏆" : streak >= 14 ? "🔥" : streak >= 7 ? "⚡" : streak > 0 ? "✨" : "🌱"
+  const streakEmoji = streakStatus === "grace" ? "⚠️" : streak >= 30 ? "🏆" : streak >= 14 ? "🔥" : streak >= 7 ? "⚡" : streak > 0 ? "✨" : "🌱"
 
   return (
     <PageTransition className="min-h-full p-4 lg:p-8">
@@ -186,20 +188,32 @@ export function DashboardClient({ user, goals, tasksDueToday, stats, streak, quo
         {/* Streak badge */}
         <div className={cn(
           "flex items-center gap-2 rounded-xl border px-4 py-2",
-          streak > 0
-            ? "border-orange-500/20 bg-orange-500/10"
-            : "border-white/6 bg-white/2"
+          streakStatus === "grace"
+            ? "border-red-500/30 bg-red-500/10"
+            : streak > 0
+              ? "border-orange-500/20 bg-orange-500/10"
+              : "border-white/6 bg-white/2"
         )}>
           <span className="text-xl">{streakEmoji}</span>
           <div className="text-right">
-            <p className="text-lg font-bold text-white leading-none">{streak}</p>
-            <p className="text-[10px] text-white/40 mt-0.5">day streak</p>
+            <p className={cn("text-lg font-bold leading-none", streakStatus === "grace" ? "text-red-400" : "text-white")}>{streak}</p>
+            <p className="text-[10px] text-white/40 mt-0.5">{streakStatus === "grace" ? "at risk!" : "day streak"}</p>
           </div>
         </div>
       </div>
 
       {/* AI — Most Important Task */}
       <MITWidget />
+
+      {/* Streak grace warning */}
+      {streakStatus === "grace" && (
+        <div className="mb-6 flex items-center gap-3 rounded-xl border border-red-500/25 bg-red-500/8 px-4 py-3">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-red-400" />
+          <p className="text-sm text-red-300/90">
+            Complete at least one task today to keep your <span className="font-semibold">{streak}-day streak</span> — it resets tomorrow if you don&apos;t.
+          </p>
+        </div>
+      )}
 
       {/* Procrastination Radar */}
       <ProcrastinationRadar tasks={procrastinatedTasks} />

@@ -253,6 +253,9 @@ export function TasksClient({ initialTasks, goals }: Props) {
   const [editCustomDates, setEditCustomDates] = useState<string[]>([])
   const [expandedWeeks, setExpandedWeeks] = useState<Set<string>>(new Set())
   const [overdueExpanded, setOverdueExpanded] = useState(false)
+  const [completedExpanded, setCompletedExpanded] = useState(false)
+
+  const isPastRange = rangeEnd < todayStart
 
   // ── Date range helpers ──────────────────────────────────────────────────────
 
@@ -275,6 +278,7 @@ export function TasksClient({ initialTasks, goals }: Props) {
     setPickerEnd(formatDateForInput(new Date(now.getFullYear(), now.getMonth() + offset + 1, 0)))
     setShowRangePicker(false)
     saveRange(s, e)
+    if (e < todayStart && (filter === "TODAY" || filter === "PENDING")) setFilter("ALL")
   }
 
   const applyCustomRange = () => {
@@ -285,6 +289,7 @@ export function TasksClient({ initialTasks, goals }: Props) {
     setRangeEnd(e)
     setShowRangePicker(false)
     saveRange(s, e)
+    if (e < todayStart && (filter === "TODAY" || filter === "PENDING")) setFilter("ALL")
   }
 
   // A task is "in the selected date range" (for ALL/PENDING/COMPLETED)
@@ -597,12 +602,12 @@ export function TasksClient({ initialTasks, goals }: Props) {
     return Array.from(map.entries()).sort(([a], [b]) => a < b ? -1 : 1)
   }
 
-  // Returns missed occurrences grouped by date (current month, oldest→newest)
+  // Returns missed occurrences grouped by date (selected range, oldest→newest)
   const getOverdueEntries = (): [string, TaskEntry[]][] => {
     const map = new Map<string, TaskEntry[]>()
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-    let cur = new Date(monthStart)
-    while (cur < todayStart) {
+    const overdueCutoff = isPastRange ? new Date(rangeEnd.getTime() + 86400000) : todayStart
+    let cur = new Date(rangeStart)
+    while (cur < overdueCutoff) {
       const dayStr = formatDateForInput(cur)
       for (const t of tasks) {
         if (!isRepeating(t.recurrence)) continue
@@ -651,28 +656,35 @@ export function TasksClient({ initialTasks, goals }: Props) {
     return false
   }
 
-  // TODAY bypasses date range; ALL/PENDING/COMPLETED respect it
+  // PENDING = today's scheduled tasks that aren't done yet (range-independent, like TODAY)
+  const isPending = (t: Task) => isScheduledToday(t) && !effectiveCompleted(t)
+
+  // TODAY bypasses date range; ALL/COMPLETED respect it; PENDING is also range-independent
   const filtered = tasks.filter((t) => {
     if (filter === "TODAY") return isScheduledToday(t)
+    if (filter === "PENDING") return isPending(t)
     if (!isInDateRange(t)) return false
     if (filter === "COMPLETED") return isCompletedInRange(t)
-    if (filter === "PENDING") {
-      if (isRepeating(t.recurrence)) return isInRange(t) && !effectiveCompleted(t)
-      return !t.completed
-    }
     return true
   })
 
   const filterCount = (f: (typeof filters)[number]) => {
     if (f === "TODAY") return tasks.filter(isScheduledToday).length
+    if (f === "PENDING") return tasks.filter(isPending).length
     const base = tasks.filter(isInDateRange)
     if (f === "ALL") return base.length
-    if (f === "COMPLETED") return base.filter(isCompletedInRange).length
-    if (f === "PENDING")
-      return base.filter((t) => {
-        if (isRepeating(t.recurrence)) return isInRange(t) && !effectiveCompleted(t)
-        return !t.completed
-      }).length
+    // Count individual occurrences, not just distinct tasks
+    if (f === "COMPLETED") {
+      let n = 0
+      for (const t of base) {
+        if (!isRepeating(t.recurrence)) { if (t.completed) n++; continue }
+        n += parseCompletedDates(t).filter(d => {
+          const dt = new Date(d + "T00:00:00")
+          return dt >= rangeStart && dt <= rangeEnd
+        }).length
+      }
+      return n
+    }
     return 0
   }
 
@@ -1049,7 +1061,9 @@ export function TasksClient({ initialTasks, goals }: Props) {
       <div className="mb-6 flex items-center gap-1">
         {/* Filter tabs */}
         <div className="flex flex-1 gap-1">
-          {filters.map((f) => (
+          {filters
+            .filter(f => !(isPastRange && (f === "TODAY" || f === "PENDING")))
+            .map((f) => (
             <button
               key={f}
               onClick={() => setFilter(f)}
@@ -1155,7 +1169,83 @@ export function TasksClient({ initialTasks, goals }: Props) {
 
       {/* Task list */}
       <div className="rounded-xl border border-white/6">
-        {displayGroups.length === 0 ? (
+        {filter === "ALL" && isPastRange ? (
+          /* ── Past month All view: Overdue + Completed sections ── */
+          (() => {
+            const overdueGroups = getOverdueEntries()
+            const completedGroups = getCompletedGroups()
+            const overdueTotal = overdueGroups.reduce((s, [, items]) => s + items.length, 0)
+            const completedTotal = completedGroups.reduce((s, [, items]) => s + items.length, 0)
+            if (overdueTotal === 0 && completedTotal === 0) {
+              return (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <CheckCircle2 className="mb-2 h-8 w-8 text-white/10" />
+                  <p className="text-sm text-white/25">No activity in this range</p>
+                </div>
+              )
+            }
+            const showOverdue = overdueTotal <= 5 || overdueExpanded
+            const showCompleted = completedTotal <= 5 || completedExpanded
+            return (
+              <div className="divide-y divide-white/10">
+                {overdueTotal > 0 && (
+                  <div>
+                    <div className="flex items-center gap-2 px-4 py-2 text-[11px] font-semibold uppercase tracking-widest text-red-400/70">
+                      <span className="text-red-400">!</span>
+                      Overdue
+                      <span className="font-normal normal-case tracking-normal text-white/15">{overdueTotal}</span>
+                      {overdueTotal > 5 && (
+                        <button onClick={() => setOverdueExpanded(p => !p)} className="ml-auto text-white/40 transition hover:text-white/70">
+                          <ChevronDown className={cn("h-4 w-4 transition-transform", overdueExpanded && "rotate-180")} />
+                        </button>
+                      )}
+                    </div>
+                    {showOverdue && (
+                      <div className="divide-y divide-white/8">
+                        {overdueGroups.map(([dayStr, dayItems]) => (
+                          <div key={dayStr}>
+                            <div className="flex items-center gap-2 px-4 py-1.5 text-[10px] font-medium uppercase tracking-widest text-white/20">
+                              <span className="pl-7">{new Date(dayStr + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</span>
+                              <span className="text-white/10">{dayItems.length}</span>
+                            </div>
+                            <ul>{dayItems.map(task => renderTaskLi(task, false))}</ul>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {completedTotal > 0 && (
+                  <div>
+                    <div className="flex items-center gap-2 px-4 py-2 text-[11px] font-semibold uppercase tracking-widest text-white/40">
+                      <CheckCircle2 className="h-3 w-3" />
+                      Completed
+                      <span className="font-normal normal-case tracking-normal text-white/15">{completedTotal}</span>
+                      {completedTotal > 5 && (
+                        <button onClick={() => setCompletedExpanded(p => !p)} className="ml-auto text-white/40 transition hover:text-white/70">
+                          <ChevronDown className={cn("h-4 w-4 transition-transform", completedExpanded && "rotate-180")} />
+                        </button>
+                      )}
+                    </div>
+                    {showCompleted && (
+                      <div className="divide-y divide-white/8">
+                        {completedGroups.map(([dayLabel, dayItems]) => (
+                          <div key={dayLabel}>
+                            <div className="flex items-center gap-2 px-4 py-1.5 text-[10px] font-medium uppercase tracking-widest text-white/20">
+                              <span className="pl-7">{dayLabel}</span>
+                              <span className="text-white/10">{dayItems.length}</span>
+                            </div>
+                            <ul>{dayItems.map(task => renderTaskLi(task, true))}</ul>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })()
+        ) : displayGroups.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <CheckCircle2 className="mb-2 h-8 w-8 text-white/10" />
             <p className="text-sm text-white/25">
@@ -1173,8 +1263,8 @@ export function TasksClient({ initialTasks, goals }: Props) {
           </div>
         ) : (
           <div className="divide-y divide-white/10">
-            {/* ── Overdue recurring tasks (current month only, ALL tab) ── */}
-            {filter === "ALL" && (() => {
+            {/* ── Overdue recurring tasks (current/future range only, ALL tab) ── */}
+            {filter === "ALL" && rangeEnd >= todayStart && (() => {
               const overdueGroups = getOverdueEntries()
               const totalCount = overdueGroups.reduce((s, [, items]) => s + items.length, 0)
               if (totalCount === 0) return null

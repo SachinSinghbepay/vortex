@@ -79,7 +79,7 @@ export default async function DashboardPage() {
   const sevenDaysAgo = new Date(today)
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
 
-  const [goals, allTasks, recentFocus, streak, staleTasks] = await Promise.all([
+  const fetchData = () => Promise.all([
     db.goal.findMany({
       where: { userId, status: "ACTIVE" },
       orderBy: { createdAt: "desc" },
@@ -101,12 +101,21 @@ export default async function DashboardPage() {
     }),
     getUserStreak(userId),
     db.task.findMany({
-      where: { userId, completed: false, createdAt: { lte: sevenDaysAgo } },
+      where: { userId, completed: false, recurrence: { not: "NONE" }, createdAt: { lte: sevenDaysAgo } },
       orderBy: { createdAt: "asc" },
-      take: 5,
-      select: { id: true, title: true, priority: true, createdAt: true },
+      select: { id: true, title: true, priority: true, createdAt: true, completedSections: true },
     }),
   ])
+
+  // Retry once on Neon cold-start errors (DB was paused/sleeping)
+  const [goals, allTasks, recentFocus, streak, staleTasks] = await fetchData().catch(async (err) => {
+    const msg = err instanceof Error ? err.message : ""
+    if (msg.includes("Can't reach database") || msg.includes("connect")) {
+      await new Promise((r) => setTimeout(r, 2000))
+      return fetchData()
+    }
+    throw err
+  })
 
   // Due today: recurring tasks active today + one-time tasks with dueDate=today
   const priorityOrder: Record<string, number> = { URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3 }
@@ -151,19 +160,35 @@ export default async function DashboardPage() {
 
   const quote = getDailyQuote()
 
-  const procrastinatedTasks = staleTasks.map((t) => ({
-    id: t.id,
-    title: t.title,
-    priority: t.priority,
-    daysAvoided: Math.floor((today.getTime() - t.createdAt.getTime()) / 86400000),
-  }))
+  // Compute daysAvoided from last completion date, filter to tasks not done in 7+ days
+  const procrastinatedTasks = staleTasks
+    .map((t) => {
+      let lastDone = t.createdAt
+      try {
+        const dates = JSON.parse(t.completedSections) as string[]
+        if (Array.isArray(dates) && dates.length > 0) {
+          const latest = [...dates].sort().at(-1)!
+          lastDone = new Date(latest + "T00:00:00")
+        }
+      } catch { /* empty */ }
+      return {
+        id: t.id,
+        title: t.title,
+        priority: t.priority,
+        daysAvoided: Math.floor((today.getTime() - new Date(lastDone).getTime()) / 86400000),
+      }
+    })
+    .filter((t) => t.daysAvoided >= 7)
+    .sort((a, b) => b.daysAvoided - a.daysAvoided)
+    .slice(0, 5)
 
   return (
     <DashboardClient
       user={session!.user}
       goals={goals}
       tasksDueToday={tasksDueToday}
-      streak={streak}
+      streak={streak.streak}
+      streakStatus={streak.status}
       quote={quote}
       procrastinatedTasks={procrastinatedTasks}
       weeklyActivity={weeklyActivity}

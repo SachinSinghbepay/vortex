@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { AlertTriangle, Loader2, CheckCircle2, Trash2, ChevronDown, ChevronUp, Sparkles } from "lucide-react"
+import { AlertTriangle, Loader2, Trash2, ChevronDown, ChevronUp, Sparkles } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 
@@ -61,20 +61,8 @@ export function ProcrastinationRadar({ tasks: initialTasks }: Props) {
     }
   }
 
-  const handleComplete = async (id: string) => {
+  const handleDelete = (id: string) => {
     setTasks((p) => p.filter((t) => t.id !== id))
-    await fetch(`/api/tasks/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ completed: true }),
-    })
-    toast.success("Task completed ✓")
-  }
-
-  const handleDelete = async (id: string) => {
-    setTasks((p) => p.filter((t) => t.id !== id))
-    await fetch(`/api/tasks/${id}`, { method: "DELETE" })
-    toast("Task removed")
   }
 
   return (
@@ -123,12 +111,6 @@ export function ProcrastinationRadar({ tasks: initialTasks }: Props) {
                     <Sparkles className="h-3 w-3" />
                     {isExpanded ? "Hide" : "Why?"}
                     {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                  </button>
-                  <button
-                    onClick={() => handleComplete(task.id)}
-                    className="rounded-lg p-1.5 text-white/20 transition hover:bg-emerald-500/10 hover:text-emerald-400"
-                  >
-                    <CheckCircle2 className="h-3.5 w-3.5" />
                   </button>
                   <button
                     onClick={() => handleDelete(task.id)}
