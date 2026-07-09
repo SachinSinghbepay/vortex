@@ -56,6 +56,12 @@ export default function RootLayout({
     >
       <head>
         <link rel="apple-touch-icon" href="/icon" />
+        {/* Runs synchronously before first paint — prevents theme flash; also stamps user timezone cookie for server-side date calculations */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('theme')||'system';var dark=t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme:dark)').matches);document.documentElement.classList.toggle('dark',dark);}catch(e){}try{var tz=Intl.DateTimeFormat().resolvedOptions().timeZone;if(tz)document.cookie='tz='+encodeURIComponent(tz)+'; path=/; max-age=86400; SameSite=Lax';}catch(e){}})();`,
+          }}
+        />
       </head>
       <body>
         <AuthSessionProvider>

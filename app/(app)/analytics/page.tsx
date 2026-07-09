@@ -3,6 +3,7 @@ import { authOptions } from "@/lib/auth"
 import { db } from "@/lib/db"
 import { getAllTasksAnalytics, getAllGoalsAnalytics, getFocusLogsAnalytics } from "@/lib/queries"
 import { AnalyticsClient } from "@/components/analytics/analytics-client"
+import { cookies } from "next/headers"
 
 function toLocalDateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
@@ -21,6 +22,7 @@ function parseCompletedDates(raw: string): string[] {
 export default async function AnalyticsPage() {
   const session = await getServerSession(authOptions)
   const userId = session!.user.id
+  const tz = (await cookies()).get("tz")?.value
 
   const [allTasks, goals, focusLogs, currentUser] = await Promise.all([
     getAllTasksAnalytics(userId),
@@ -51,14 +53,18 @@ export default async function AnalyticsPage() {
   })
   focusLogs.forEach((f) => activityDates.add(toLocalDateStr(f.createdAt)))
 
-  let streak = 0
-  const todayDate = new Date()
-  for (let i = 0; i < 60; i++) {
+  const todayStreak = tz
+    ? (() => { try { return new Date().toLocaleDateString("en-CA", { timeZone: tz }) } catch { return toLocalDateStr(new Date()) } })()
+    : toLocalDateStr(new Date())
+  const todayDate = new Date(todayStreak + "T12:00:00")
+  let streakFromYesterday = 0
+  for (let i = 1; i <= 60; i++) {
     const d = new Date(todayDate)
     d.setDate(d.getDate() - i)
-    if (activityDates.has(toLocalDateStr(d))) streak++
+    if (activityDates.has(toLocalDateStr(d))) streakFromYesterday++
     else break
   }
+  const streak = activityDates.has(todayStreak) ? streakFromYesterday + 1 : streakFromYesterday
 
   // ── Rates ─────────────────────────────────────────────────────────────────
   const taskCompletionRate = allTasks.length > 0 ? Math.round((completedTasks.length / allTasks.length) * 100) : 0

@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { Menu, Brain } from "lucide-react"
 import { Sidebar } from "@/components/dashboard/sidebar"
+import { DashboardTour } from "@/components/dashboard/dashboard-tour"
 import { cn } from "@/lib/utils"
 
 interface AppShellProps {
@@ -52,6 +53,7 @@ export function AppShell({ user, children }: AppShellProps) {
           </div>
         </div>
 
+        <DashboardTour />
         <main
           className="flex-1 overflow-y-auto"
           style={{

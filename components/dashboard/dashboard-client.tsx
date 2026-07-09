@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Target, CheckSquare, TrendingUp, Zap, Plus, ArrowRight, Sparkles, Loader2, AlertTriangle } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -164,16 +164,21 @@ function MITWidget() {
 }
 
 export function DashboardClient({ user, goals, tasksDueToday, stats, streak, streakStatus, quote, procrastinatedTasks, weeklyActivity }: Props) {
-  const hour = new Date().getHours()
-  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening"
+  // null on server → 12 as safe default → updated client-side to avoid hydration mismatch
+  const [hour, setHour] = useState<number | null>(null)
+  useEffect(() => { setHour(new Date().getHours()) }, [])
+  const h = hour ?? 12
+  const greeting = h < 5 ? "Good night" : h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : h < 21 ? "Good evening" : "Good night"
   const firstName = user.name?.split(" ")[0] ?? "there"
-  const streakEmoji = streakStatus === "grace" ? "⚠️" : streak >= 30 ? "🏆" : streak >= 14 ? "🔥" : streak >= 7 ? "⚡" : streak > 0 ? "✨" : "🌱"
+  // Only show "at risk" warning after 8 PM — alarming the user at 7 AM is bad UX
+  const showGrace = streakStatus === "grace" && h >= 20
+  const streakEmoji = showGrace ? "⚠️" : streak >= 30 ? "🏆" : streak >= 14 ? "🔥" : streak >= 7 ? "⚡" : streak > 0 ? "✨" : "🌱"
 
   return (
     <PageTransition className="min-h-full p-4 lg:p-8">
       {/* Header */}
       <div className="mb-6 flex items-start justify-between">
-        <div>
+        <div id="tour-greeting">
           <h1 className="text-xl font-semibold text-white">
             {greeting}, {firstName}
           </h1>
@@ -186,9 +191,9 @@ export function DashboardClient({ user, goals, tasksDueToday, stats, streak, str
           </p>
         </div>
         {/* Streak badge */}
-        <div className={cn(
+        <div id="tour-streak" className={cn(
           "flex items-center gap-2 rounded-xl border px-4 py-2",
-          streakStatus === "grace"
+          showGrace
             ? "border-red-500/30 bg-red-500/10"
             : streak > 0
               ? "border-orange-500/20 bg-orange-500/10"
@@ -196,17 +201,19 @@ export function DashboardClient({ user, goals, tasksDueToday, stats, streak, str
         )}>
           <span className="text-xl">{streakEmoji}</span>
           <div className="text-right">
-            <p className={cn("text-lg font-bold leading-none", streakStatus === "grace" ? "text-red-400" : "text-white")}>{streak}</p>
-            <p className="text-[10px] text-white/40 mt-0.5">{streakStatus === "grace" ? "at risk!" : "day streak"}</p>
+            <p className={cn("text-lg font-bold leading-none", showGrace ? "text-red-400" : "text-white")}>{streak}</p>
+            <p className="text-[10px] text-white/40 mt-0.5">{showGrace ? "at risk!" : "day streak"}</p>
           </div>
         </div>
       </div>
 
       {/* AI — Most Important Task */}
-      <MITWidget />
+      <div id="tour-mit">
+        <MITWidget />
+      </div>
 
-      {/* Streak grace warning */}
-      {streakStatus === "grace" && (
+      {/* Streak grace warning — only after 8 PM */}
+      {showGrace && (
         <div className="mb-6 flex items-center gap-3 rounded-xl border border-red-500/25 bg-red-500/8 px-4 py-3">
           <AlertTriangle className="h-4 w-4 shrink-0 text-red-400" />
           <p className="text-sm text-red-300/90">
@@ -219,7 +226,7 @@ export function DashboardClient({ user, goals, tasksDueToday, stats, streak, str
       <ProcrastinationRadar tasks={procrastinatedTasks} />
 
       {/* Stat cards */}
-      <div className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div id="tour-stats" className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {statCards(stats).map(({ label, value, icon: Icon, color, bg, suffix }) => (
           <div
             key={label}
@@ -241,7 +248,7 @@ export function DashboardClient({ user, goals, tasksDueToday, stats, streak, str
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Tasks due today */}
-        <div className="lg:col-span-1">
+        <div id="tour-tasks-today" className="lg:col-span-1">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-medium text-white/70">Due Today</h2>
             <Link href="/tasks">
@@ -275,7 +282,7 @@ export function DashboardClient({ user, goals, tasksDueToday, stats, streak, str
         </div>
 
         {/* Active goals */}
-        <div className="lg:col-span-1">
+        <div id="tour-goals-list" className="lg:col-span-1">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-medium text-white/70">Active Goals</h2>
             <Link href="/goals">

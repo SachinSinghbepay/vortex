@@ -83,6 +83,76 @@
 :root { --bg-solid: #f8f8f8; }
 .dark { --bg-solid: #0d0d0d; }
 
+/* ── Driver.js tour — dark theme override ────────────────────────────────── */
+.driver-popover {
+  background-color: #1a1a1f !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 14px !important;
+  color: #fff !important;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5) !important;
+  max-width: 320px !important;
+}
+.driver-popover-title {
+  color: #fff !important;
+  font-size: 15px !important;
+  font-weight: 600 !important;
+}
+.driver-popover-description {
+  color: rgba(255, 255, 255, 0.55) !important;
+  font-size: 13px !important;
+  line-height: 1.6 !important;
+  margin-top: 6px !important;
+}
+.driver-popover-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
+  margin-top: 14px !important;
+  padding-top: 12px !important;
+}
+.driver-popover-progress-text {
+  color: rgba(255, 255, 255, 0.3) !important;
+  font-size: 12px !important;
+}
+.driver-popover-prev-btn,
+.driver-popover-next-btn,
+.driver-popover-done-btn {
+  background: transparent !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 8px !important;
+  color: rgba(255, 255, 255, 0.7) !important;
+  font-size: 12px !important;
+  padding: 5px 12px !important;
+  text-shadow: none !important;
+  transition: background 0.15s, color 0.15s !important;
+}
+.driver-popover-next-btn,
+.driver-popover-done-btn {
+  background: #7c3aed !important;
+  border-color: #7c3aed !important;
+  color: #fff !important;
+}
+.driver-popover-prev-btn:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: #fff !important;
+}
+.driver-popover-next-btn:hover,
+.driver-popover-done-btn:hover {
+  background: #6d28d9 !important;
+  border-color: #6d28d9 !important;
+}
+.driver-popover-close-btn {
+  color: rgba(255, 255, 255, 0.3) !important;
+  font-size: 18px !important;
+  top: 12px !important;
+  right: 14px !important;
+}
+.driver-popover-close-btn:hover {
+  color: rgba(255, 255, 255, 0.7) !important;
+}
+.driver-popover-arrow-side-left.driver-popover-arrow  { border-right-color: #1a1a1f !important; }
+.driver-popover-arrow-side-right.driver-popover-arrow { border-left-color: #1a1a1f !important; }
+.driver-popover-arrow-side-top.driver-popover-arrow   { border-bottom-color: #1a1a1f !important; }
+.driver-popover-arrow-side-bottom.driver-popover-arrow{ border-top-color: #1a1a1f !important; }
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

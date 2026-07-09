@@ -19,11 +19,11 @@ import { ThemeToggle } from "@/components/ui/theme-toggle"
 
 const navItems = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-  { href: "/goals", icon: Target, label: "Goals" },
-  { href: "/tasks", icon: CheckSquare, label: "Tasks" },
-  { href: "/focus", icon: Zap, label: "Focus" },
-  { href: "/analytics", icon: BarChart3, label: "Analytics" },
-  { href: "/ai", icon: Sparkles, label: "AI Tools" },
+  { href: "/goals", icon: Target, label: "Goals", id: "tour-nav-goals" },
+  { href: "/tasks", icon: CheckSquare, label: "Tasks", id: "tour-nav-tasks" },
+  { href: "/focus", icon: Zap, label: "Focus", id: "tour-nav-focus" },
+  { href: "/analytics", icon: BarChart3, label: "Analytics", id: "tour-nav-analytics" },
+  { href: "/ai", icon: Sparkles, label: "AI Tools", id: "tour-nav-ai" },
   { href: "/settings", icon: Settings, label: "Settings" },
 ]
 
@@ -48,12 +48,13 @@ export function Sidebar({ user, onNavigate }: SidebarProps) {
 
       {/* Nav */}
       <nav className="flex-1 space-y-0.5 p-3">
-        {navItems.map(({ href, icon: Icon, label }) => {
+        {navItems.map(({ href, icon: Icon, label, id }) => {
           const active = pathname === href
           return (
             <Link
               key={href}
               href={href}
+              id={id}
               onClick={onNavigate}
               className={cn(
                 "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors",

@@ -6,6 +6,7 @@ import { db } from "@/lib/db"
 import { DashboardClient } from "@/components/dashboard/dashboard-client"
 import { getUserStreak } from "@/lib/streak"
 import { getDailyQuote } from "@/lib/quotes"
+import { cookies } from "next/headers"
 
 type TaskRow = {
   id: string
@@ -72,6 +73,7 @@ function toLocalDateStr(d: Date): string {
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions)
   const userId = session!.user.id
+  const tz = (await cookies()).get("tz")?.value
 
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -99,7 +101,7 @@ export default async function DashboardPage() {
       orderBy: { createdAt: "desc" },
       take: 7,
     }),
-    getUserStreak(userId),
+    getUserStreak(userId, tz),
     db.task.findMany({
       where: { userId, completed: false, recurrence: { not: "NONE" }, createdAt: { lte: sevenDaysAgo } },
       orderBy: { createdAt: "asc" },
@@ -117,10 +119,13 @@ export default async function DashboardPage() {
     throw err
   })
 
+  // Run goal count in parallel with data fetch (separate to avoid breaking tuple inference)
+  const totalActiveGoals = await db.goal.count({ where: { userId, status: "ACTIVE" } })
+
   // Due today: recurring tasks active today + one-time tasks with dueDate=today
   const priorityOrder: Record<string, number> = { URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3 }
-  const tasksDueToday = allTasks
-    .filter((t) => isActiveToday(t, today, todayStr))
+  const allDueToday = allTasks.filter((t) => isActiveToday(t, today, todayStr))
+  const tasksDueToday = allDueToday
     .sort((a, b) => (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2))
     .slice(0, 6)
     .map((t) => ({ id: t.id, title: t.title, priority: t.priority, completed: t.completed }))
@@ -193,8 +198,8 @@ export default async function DashboardPage() {
       procrastinatedTasks={procrastinatedTasks}
       weeklyActivity={weeklyActivity}
       stats={{
-        activeGoals: goals.length,
-        tasksDueToday: tasksDueToday.length,
+        activeGoals: totalActiveGoals,
+        tasksDueToday: allDueToday.length,
         completionRate,
         focusScore: avgFocus,
       }}

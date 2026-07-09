@@ -11,7 +11,17 @@ export type StreakResult = {
   status: StreakStatus
 }
 
-export async function getUserStreak(userId: string): Promise<StreakResult> {
+function getTodayInTz(tz?: string): string {
+  if (tz) {
+    try {
+      // en-CA locale gives YYYY-MM-DD format natively
+      return new Date().toLocaleDateString("en-CA", { timeZone: tz })
+    } catch { /* invalid tz, fall through */ }
+  }
+  return toLocalDateStr(new Date())
+}
+
+export async function getUserStreak(userId: string, tz?: string): Promise<StreakResult> {
   const sixtyDaysAgo = new Date()
   sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60)
   const sixtyDaysAgoStr = toLocalDateStr(sixtyDaysAgo)
@@ -46,8 +56,8 @@ export async function getUserStreak(userId: string): Promise<StreakResult> {
 
   focusLogs.forEach((f) => activityDates.add(toLocalDateStr(f.createdAt)))
 
-  const today = new Date()
-  const todayStr = toLocalDateStr(today)
+  const todayStr = getTodayInTz(tz)
+  const today = new Date(todayStr + "T12:00:00") // noon on user's local today, used for offset arithmetic
   const yesterday = new Date(today)
   yesterday.setDate(today.getDate() - 1)
   const yesterdayStr = toLocalDateStr(yesterday)
