@@ -3,8 +3,8 @@
 import { motion, Variants } from "framer-motion"
 
 export const pageVariants: Variants = {
-  hidden: { opacity: 0 },
-  visible: { opacity: 1, transition: { duration: 0.3, ease: "easeOut" } },
+  hidden: { opacity: 0, y: 6 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.25, ease: "easeOut" } },
 }
 
 export const listVariants: Variants = {
@@ -19,7 +19,13 @@ export const itemVariants: Variants = {
 
 export function PageTransition({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <motion.div className={className} initial="hidden" animate="visible" variants={pageVariants}>
+    <motion.div
+      className={className}
+      initial="hidden"
+      animate="visible"
+      variants={pageVariants}
+      style={{ backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden" }}
+    >
       {children}
     </motion.div>
   )
