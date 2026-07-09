@@ -35,7 +35,7 @@ export function AppShell({ user, children }: AppShellProps) {
       </div>
 
       {/* Main area */}
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden" style={{ contain: "paint layout" }}>
         {/* Mobile top bar */}
         <div className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-4 md:hidden">
           <button
@@ -52,7 +52,14 @@ export function AppShell({ user, children }: AppShellProps) {
           </div>
         </div>
 
-        <main className="flex-1 overflow-y-auto bg-background" style={{ overscrollBehavior: "contain" }}>{children}</main>
+        <main
+          className="flex-1 overflow-y-auto"
+          style={{
+            overscrollBehavior: "contain",
+            backgroundColor: "var(--bg-solid, #0d0d0d)",
+            transform: "translateZ(0)",
+          }}
+        >{children}</main>
       </div>
     </div>
   )

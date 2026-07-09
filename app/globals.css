@@ -79,13 +79,16 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+/* Solid hex backgrounds — used where oklch may not resolve on older Android Chrome */
+:root { --bg-solid: #f8f8f8; }
+.dark { --bg-solid: #0d0d0d; }
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
   body {
     @apply bg-background text-foreground;
-    /* Solid fallback prevents GPU texture bleed on Android Chrome */
     background-color: #0d0d0d;
   }
   .dark body {
