@@ -3,7 +3,6 @@
 import { useState } from "react"
 import { Flame, Target, CheckSquare, Zap, TrendingUp, Shield, Sparkles, ChevronDown, ChevronUp, Loader2, Pencil, Check, X, RotateCcw } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { PageTransition } from "@/components/ui/page-transition"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -36,27 +35,18 @@ interface Props {
 function BarChart({
   data,
   color = "bg-violet-500/60",
-  hoverColor = "hover:bg-violet-500",
-  unit = "",
 }: {
   data: Array<{ label: string; value: number }>
   color?: string
-  hoverColor?: string
-  unit?: string
 }) {
   const max = Math.max(...data.map((d) => d.value), 1)
   return (
     <div className="flex h-32 items-end gap-1.5">
       {data.map(({ label, value }, i) => (
-        <div key={i} className="group flex flex-1 flex-col items-center gap-1.5">
-          <div className="relative flex w-full flex-col items-center justify-end" style={{ height: "100px" }}>
-            {value > 0 && (
-              <span className="absolute -top-5 text-[9px] text-white/0 transition group-hover:text-white/50">
-                {value}{unit}
-              </span>
-            )}
+        <div key={i} className="flex flex-1 flex-col items-center gap-1.5">
+          <div className="flex w-full flex-col items-center justify-end" style={{ height: "100px" }}>
             <div
-              className={cn("w-full rounded-t transition-all", color, hoverColor)}
+              className={cn("w-full rounded-t", color)}
               style={{ height: `${(value / max) * 100}%`, minHeight: value > 0 ? 4 : 0 }}
             />
           </div>
@@ -199,7 +189,7 @@ function CrossGoalAnalysis() {
 
   return (
     <div className="mb-6">
-      <div className={cn("rounded-xl border transition-all", hc ? `${hc.border} ${hc.bg}` : "border-white/6 bg-white/2")}>
+      <div className={cn("rounded-xl border", hc ? `${hc.border} ${hc.bg}` : "border-white/6 bg-white/2")}>
         <div className="flex items-center gap-3 px-5 py-4">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-600/20">
             <Sparkles className="h-4 w-4 text-violet-400" />
@@ -743,7 +733,7 @@ export function AnalyticsClient({
         {kpis.map(({ label, value, suffix, icon: Icon, color, bg, sub }) => (
           <div
             key={label}
-            className="rounded-xl border border-white/6 bg-white/2 p-5 transition hover:border-white/10 hover:bg-white/4"
+            className="rounded-xl border border-white/6 bg-white/2 p-5"
           >
             <div className="mb-3 flex items-center justify-between">
               <span className="text-xs text-white/40">{label}</span>
@@ -771,7 +761,7 @@ export function AnalyticsClient({
         </div>
         <div className={cn("h-2 w-full overflow-hidden rounded-full", bc.track)}>
           <div
-            className={cn("h-full rounded-full transition-all", bc.bg)}
+            className={cn("h-full rounded-full", bc.bg)}
             style={{ width: `${burnoutScore}%` }}
           />
         </div>
@@ -792,7 +782,6 @@ export function AnalyticsClient({
           </div>
           <BarChart
             data={weeklyFocusByDay.map((d) => ({ label: d.day, value: d.minutes }))}
-            unit="m"
           />
         </div>
 
@@ -815,7 +804,6 @@ export function AnalyticsClient({
         <BarChart
           data={tasksByDay.map((d) => ({ label: d.day, value: d.completed }))}
           color="bg-emerald-500/50"
-          hoverColor="hover:bg-emerald-500"
         />
       </div>
 
@@ -838,7 +826,7 @@ export function AnalyticsClient({
                 </div>
                 <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/6">
                   <div
-                    className={cn("h-full rounded-full transition-all", typeColor[goal.type] ?? "bg-white/30")}
+                    className={cn("h-full rounded-full", typeColor[goal.type] ?? "bg-white/30")}
                     style={{ width: `${goal.progress}%`, opacity: 0.7 }}
                   />
                 </div>
