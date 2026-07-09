@@ -721,7 +721,7 @@ export function AnalyticsClient({
   ]
 
   return (
-    <div className="min-h-full p-4 lg:p-8">
+    <div className="min-h-full p-4 lg:p-8" style={{ transform: "translateZ(0)" }}>
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-xl font-semibold text-white">Analytics</h1>
