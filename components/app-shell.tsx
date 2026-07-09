@@ -52,7 +52,7 @@ export function AppShell({ user, children }: AppShellProps) {
           </div>
         </div>
 
-        <main className="flex-1 overflow-y-auto" style={{ overscrollBehavior: "contain" }}>{children}</main>
+        <main className="flex-1 overflow-y-auto bg-background" style={{ overscrollBehavior: "contain" }}>{children}</main>
       </div>
     </div>
   )
