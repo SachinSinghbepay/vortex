@@ -731,7 +731,7 @@ export function AnalyticsClient({
   ]
 
   return (
-    <PageTransition className="min-h-full p-4 lg:p-8">
+    <div className="min-h-full p-4 lg:p-8">
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-xl font-semibold text-white">Analytics</h1>
@@ -872,6 +872,6 @@ export function AnalyticsClient({
         <h2 className="mb-4 text-sm font-medium text-white/50 uppercase tracking-widest">My Schedule</h2>
         <ScheduleSection goals={scheduleGoals} initialSchedule={savedSchedule} />
       </div>
-    </PageTransition>
+    </div>
   )
 }
