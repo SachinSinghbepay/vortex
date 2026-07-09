@@ -14,11 +14,11 @@ export function AppShell({ user, children }: AppShellProps) {
   const [open, setOpen] = useState(false)
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-dvh overflow-hidden bg-background" style={{ isolation: "isolate" }}>
       {/* Mobile backdrop */}
       {open && (
         <div
-          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm md:hidden"
+          className="fixed inset-0 z-40 bg-black/50 md:hidden"
           onClick={() => setOpen(false)}
         />
       )}
@@ -35,7 +35,7 @@ export function AppShell({ user, children }: AppShellProps) {
       </div>
 
       {/* Main area */}
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden" style={{ contain: "paint layout" }}>
         {/* Mobile top bar */}
         <div className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-4 md:hidden">
           <button
@@ -52,7 +52,7 @@ export function AppShell({ user, children }: AppShellProps) {
           </div>
         </div>
 
-        <main className="flex-1 overflow-y-auto">{children}</main>
+        <main className="flex-1 overflow-y-auto" style={{ overscrollBehavior: "contain" }}>{children}</main>
       </div>
     </div>
   )
