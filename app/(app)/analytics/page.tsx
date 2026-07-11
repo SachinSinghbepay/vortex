@@ -57,14 +57,28 @@ export default async function AnalyticsPage() {
     ? (() => { try { return new Date().toLocaleDateString("en-CA", { timeZone: tz }) } catch { return toLocalDateStr(new Date()) } })()
     : toLocalDateStr(new Date())
   const todayDate = new Date(todayStreak + "T12:00:00")
-  let streakFromYesterday = 0
-  for (let i = 1; i <= 60; i++) {
-    const d = new Date(todayDate)
-    d.setDate(d.getDate() - i)
-    if (activityDates.has(toLocalDateStr(d))) streakFromYesterday++
-    else break
+  const yesterdayStreak = toLocalDateStr(new Date(todayDate.getTime() - 86400000))
+  const twoDaysAgoStreak = toLocalDateStr(new Date(todayDate.getTime() - 2 * 86400000))
+  const hasToday     = activityDates.has(todayStreak)
+  const hasYesterday = activityDates.has(yesterdayStreak)
+  const has2DaysAgo  = activityDates.has(twoDaysAgoStreak)
+  function countBackAnalytics(startOffset: number): number {
+    let s = 0
+    for (let i = startOffset; i <= 61; i++) {
+      const d = new Date(todayDate)
+      d.setDate(d.getDate() - i)
+      if (activityDates.has(toLocalDateStr(d))) s++
+      else break
+    }
+    return s
   }
-  const streak = activityDates.has(todayStreak) ? streakFromYesterday + 1 : streakFromYesterday
+  const streak = !hasToday && !hasYesterday && !has2DaysAgo
+    ? 0
+    : hasToday
+      ? countBackAnalytics(1) + 1
+      : hasYesterday
+        ? countBackAnalytics(1)
+        : countBackAnalytics(2)
 
   // ── Rates ─────────────────────────────────────────────────────────────────
   const taskCompletionRate = allTasks.length > 0 ? Math.round((completedTasks.length / allTasks.length) * 100) : 0

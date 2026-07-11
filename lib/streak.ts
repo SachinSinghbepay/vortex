@@ -4,7 +4,11 @@ function toLocalDateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
 }
 
-export type StreakStatus = "active" | "grace" | "lost"
+export type StreakStatus = "active" | "grace" | "missed" | "lost"
+// active  = completed today
+// grace   = today not done yet, yesterday was done (first warning — show after 8pm)
+// missed  = yesterday missed, today is still the second chance (always show warning)
+// lost    = 2+ consecutive days missed
 
 export type StreakResult = {
   streak: number
@@ -14,7 +18,6 @@ export type StreakResult = {
 function getTodayInTz(tz?: string): string {
   if (tz) {
     try {
-      // en-CA locale gives YYYY-MM-DD format natively
       return new Date().toLocaleDateString("en-CA", { timeZone: tz })
     } catch { /* invalid tz, fall through */ }
   }
@@ -57,32 +60,46 @@ export async function getUserStreak(userId: string, tz?: string): Promise<Streak
   focusLogs.forEach((f) => activityDates.add(toLocalDateStr(f.createdAt)))
 
   const todayStr = getTodayInTz(tz)
-  const today = new Date(todayStr + "T12:00:00") // noon on user's local today, used for offset arithmetic
+  const today = new Date(todayStr + "T12:00:00")
+
   const yesterday = new Date(today)
   yesterday.setDate(today.getDate() - 1)
   const yesterdayStr = toLocalDateStr(yesterday)
 
-  const hasToday = activityDates.has(todayStr)
-  const hasYesterday = activityDates.has(yesterdayStr)
+  const twoDaysAgo = new Date(today)
+  twoDaysAgo.setDate(today.getDate() - 2)
+  const twoDaysAgoStr = toLocalDateStr(twoDaysAgo)
 
-  // Neither today nor yesterday → streak is gone
-  if (!hasToday && !hasYesterday) {
+  const hasToday     = activityDates.has(todayStr)
+  const hasYesterday = activityDates.has(yesterdayStr)
+  const has2DaysAgo  = activityDates.has(twoDaysAgoStr)
+
+  // Lost only after 2 consecutive missed days
+  if (!hasToday && !hasYesterday && !has2DaysAgo) {
     return { streak: 0, status: "lost" }
   }
 
-  // Count consecutive completed days from yesterday backwards
-  let streakFromYesterday = 0
-  for (let i = 1; i <= 60; i++) {
-    const d = new Date(today)
-    d.setDate(today.getDate() - i)
-    if (activityDates.has(toLocalDateStr(d))) streakFromYesterday++
-    else break
+  // Helper: count consecutive days backwards from a starting offset
+  function countBack(startOffset: number): number {
+    let s = 0
+    for (let i = startOffset; i <= 61; i++) {
+      const d = new Date(today)
+      d.setDate(today.getDate() - i)
+      if (activityDates.has(toLocalDateStr(d))) s++
+      else break
+    }
+    return s
   }
 
   if (hasToday) {
-    return { streak: streakFromYesterday + 1, status: "active" }
+    return { streak: countBack(1) + 1, status: "active" }
   }
 
-  // hasYesterday but not today → grace period
-  return { streak: streakFromYesterday, status: "grace" }
+  if (hasYesterday) {
+    // Missed today — first warning, still have until midnight
+    return { streak: countBack(1), status: "grace" }
+  }
+
+  // Missed yesterday, today is the second (last) chance
+  return { streak: countBack(2), status: "missed" }
 }

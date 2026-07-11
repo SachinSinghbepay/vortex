@@ -24,22 +24,18 @@ type TaskRow = {
   updatedAt: Date
 }
 
-function isActiveToday(task: TaskRow, today: Date, todayStr: string): boolean {
+function isActiveToday(task: TaskRow, todayStr: string): boolean {
   if (task.recurrence === "NONE") {
     if (!task.dueDate) return false
-    const due = new Date(task.dueDate)
-    due.setHours(0, 0, 0, 0)
-    return due.getTime() === today.getTime() && !task.completed
+    return toLocalDateStr(task.dueDate) === todayStr && !task.completed
   }
 
-  const start = new Date(task.startDate ?? task.createdAt)
-  start.setHours(0, 0, 0, 0)
-  if (start.getTime() > today.getTime()) return false
+  const startStr = toLocalDateStr(task.startDate ?? task.createdAt)
+  if (startStr > todayStr) return false
 
   if (task.recurrenceEndDate) {
-    const end = new Date(task.recurrenceEndDate)
-    end.setHours(0, 0, 0, 0)
-    if (end.getTime() < today.getTime()) return false
+    const endStr = toLocalDateStr(task.recurrenceEndDate)
+    if (endStr < todayStr) return false
   }
 
   try {
@@ -53,7 +49,9 @@ function isActiveToday(task: TaskRow, today: Date, todayStr: string): boolean {
   if (task.recurrence === "DAILY") return true
 
   if (task.recurrence === "EVERY_OTHER_DAY") {
-    const diff = Math.round((today.getTime() - start.getTime()) / 86400000)
+    const startDate = new Date(startStr + "T12:00:00")
+    const todayDate = new Date(todayStr + "T12:00:00")
+    const diff = Math.round((todayDate.getTime() - startDate.getTime()) / 86400000)
     return diff % 2 === 0
   }
 
@@ -75,9 +73,11 @@ export default async function DashboardPage() {
   const userId = session!.user.id
   const tz = (await cookies()).get("tz")?.value
 
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const todayStr = toLocalDateStr(today)
+  // Use user's local date from tz cookie — task dates are stored as local calendar strings
+  const todayStr = tz
+    ? (() => { try { return new Date().toLocaleDateString("en-CA", { timeZone: tz }) } catch { return toLocalDateStr(new Date()) } })()
+    : toLocalDateStr(new Date())
+  const today = new Date(todayStr + "T12:00:00")
   const sevenDaysAgo = new Date(today)
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
 
@@ -124,7 +124,7 @@ export default async function DashboardPage() {
 
   // Due today: recurring tasks active today + one-time tasks with dueDate=today
   const priorityOrder: Record<string, number> = { URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3 }
-  const allDueToday = allTasks.filter((t) => isActiveToday(t, today, todayStr))
+  const allDueToday = allTasks.filter((t) => isActiveToday(t, todayStr))
   const tasksDueToday = allDueToday
     .sort((a, b) => (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2))
     .slice(0, 6)

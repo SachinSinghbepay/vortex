@@ -170,8 +170,9 @@ export function DashboardClient({ user, goals, tasksDueToday, stats, streak, str
   const h = hour ?? 12
   const greeting = h < 5 ? "Good night" : h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : h < 21 ? "Good evening" : "Good night"
   const firstName = user.name?.split(" ")[0] ?? "there"
-  // Only show "at risk" warning after 8 PM — alarming the user at 7 AM is bad UX
-  const showGrace = streakStatus === "grace" && h >= 20
+  // "grace" = today not done (show warning after 8pm only — you've just started the day)
+  // "missed" = yesterday was also missed (always warn — this is the last chance)
+  const showGrace = streakStatus === "missed" || (streakStatus === "grace" && h >= 20)
   const streakEmoji = showGrace ? "⚠️" : streak >= 30 ? "🏆" : streak >= 14 ? "🔥" : streak >= 7 ? "⚡" : streak > 0 ? "✨" : "🌱"
 
   return (
