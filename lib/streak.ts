@@ -32,7 +32,7 @@ export async function getUserStreak(userId: string, tz?: string): Promise<Streak
   const [tasks, focusLogs] = await Promise.all([
     db.task.findMany({
       where: { userId },
-      select: { completed: true, completedSections: true, updatedAt: true },
+      select: { completed: true, completedSections: true, completionLog: true, updatedAt: true },
     }),
     db.focusLog.findMany({
       where: { userId, createdAt: { gte: sixtyDaysAgo } },
@@ -43,8 +43,11 @@ export async function getUserStreak(userId: string, tz?: string): Promise<Streak
   const activityDates = new Set<string>()
 
   tasks.forEach((t) => {
+    // completionLog stores ACTUAL completion dates (always today's date when task is checked off)
+    // completedSections stores occurrence dates (which day was due) — used only as fallback for legacy data
+    const logRaw = t.completionLog && t.completionLog !== "[]" ? t.completionLog : t.completedSections
     try {
-      const dates = JSON.parse(t.completedSections) as unknown[]
+      const dates = JSON.parse(logRaw) as unknown[]
       if (Array.isArray(dates) && dates.length > 0) {
         dates.forEach((d) => {
           if (typeof d === "string" && d >= sixtyDaysAgoStr) activityDates.add(d.slice(0, 10))

@@ -41,7 +41,6 @@ Return a JSON object with this exact structure:
       "tasks": ["Specific one-time setup task 1", "Specific one-time setup task 2"]
     }
   ],
-  "weeklyHours": <number — realistic hours per week needed>,
   "difficulty": "Easy" | "Medium" | "Hard" | "Very Hard",
   "tips": ["Practical tip 1", "Practical tip 2", "Practical tip 3"],
   "realisticAssessment": "Honest 1-2 sentence assessment of whether this goal is achievable given the constraints"

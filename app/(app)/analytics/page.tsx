@@ -44,12 +44,16 @@ export default async function AnalyticsPage() {
   const completedTasks = taskCompletionDates.filter(({ dates, task }) => dates.size > 0 || task.completed)
 
   // ── Streak ────────────────────────────────────────────────────────────────
+  // Use completionLog (actual completion dates) — not completedSections (occurrence/due dates)
+  // to prevent retroactive streak restoration from completing overdue tasks
   const activityDates = new Set<string>()
-  taskCompletionDates.forEach(({ dates, task }) => {
-    dates.forEach((d) => activityDates.add(d))
-    if (task.completed && dates.size === 0) {
-      activityDates.add(toLocalDateStr(task.updatedAt))
-    }
+  taskCompletionDates.forEach(({ task }) => {
+    const logRaw = task.completionLog && task.completionLog !== "[]" ? task.completionLog : task.completedSections
+    try {
+      const log = JSON.parse(logRaw) as unknown[]
+      if (Array.isArray(log)) log.forEach((d) => { if (typeof d === "string") activityDates.add(d.slice(0, 10)) })
+    } catch { /* empty */ }
+    if (task.completed && activityDates.size === 0) activityDates.add(toLocalDateStr(task.updatedAt))
   })
   focusLogs.forEach((f) => activityDates.add(toLocalDateStr(f.createdAt)))
 

@@ -706,7 +706,10 @@ export function TasksClient({ initialTasks, goals }: Props) {
       await fetch(`/api/tasks/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ completed: done }),
+        body: JSON.stringify({
+          completed: done,
+          ...(done && { completionLogDate: formatDateForInput(todayStart) }),
+        }),
       })
       if (done) toast.success("Task completed ✓")
       return
@@ -718,6 +721,8 @@ export function TasksClient({ initialTasks, goals }: Props) {
     if (!range) return
     // Store the occurrence date (start of the section being completed)
     const occurrenceDate = formatDateForInput(range.start)
+    // Actual completion date is always TODAY — never the occurrence date for overdue tasks
+    const actualCompletionDate = formatDateForInput(todayStart)
 
     const dates = parseCompletedDates(task)
     // Migrate legacy: if this is the first write and completed=true, preserve the updatedAt date as a prior log entry
@@ -730,6 +735,7 @@ export function TasksClient({ initialTasks, goals }: Props) {
     const payload = JSON.stringify(newDates)
     // When unchecking, clear completed flag so the legacy updatedAt fallback can't resurrect it
     const patchBody: Record<string, unknown> = { completedSections: payload }
+    if (done) patchBody.completionLogDate = actualCompletionDate
     if (!done) patchBody.completed = false
     setTasks((p) => p.map((t) => t.id === id
       ? { ...t, completedSections: payload, ...(!done && { completed: false }) }

@@ -62,7 +62,7 @@ export const getAllTasksAnalytics = (userId: string) =>
   unstable_cache(
     () => db.task.findMany({
       where: { userId },
-      select: { id: true, completed: true, goalId: true, updatedAt: true, dueDate: true, createdAt: true, completedSections: true },
+      select: { id: true, completed: true, goalId: true, updatedAt: true, dueDate: true, createdAt: true, completedSections: true, completionLog: true },
       orderBy: { createdAt: "desc" },
     }),
     ["tasks-analytics", userId],

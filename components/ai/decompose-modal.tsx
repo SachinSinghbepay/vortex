@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Sparkles, Loader2, ChevronDown, ChevronUp, Clock, Zap, CheckCircle2, Copy, Check } from "lucide-react"
+import { Sparkles, Loader2, ChevronDown, ChevronUp, Zap, CheckCircle2, Copy, Check } from "lucide-react"
 import { toast } from "sonner"
 import { Modal } from "@/components/ui/modal"
 import { Button } from "@/components/ui/button"
@@ -22,7 +22,6 @@ interface Milestone {
 interface DecomposeResult {
   habits: Habit[]
   milestones: Milestone[]
-  weeklyHours: number
   difficulty: "Easy" | "Medium" | "Hard" | "Very Hard"
   tips: string[]
   realisticAssessment: string
@@ -63,7 +62,7 @@ export function DecomposeModal({ open, onClose, goal, onSaveTasks, onSaveHabits,
     if (!result) return
     const text = [
       `=== AI Goal Decomposition: ${goal.title} ===`,
-      `Difficulty: ${result.difficulty} | ${result.weeklyHours}h/week`,
+      `Difficulty: ${result.difficulty}`,
       `\nAssessment:\n${result.realisticAssessment}`,
       `\nROADMAP:`,
       ...result.milestones.map((m, i) =>
@@ -156,10 +155,6 @@ export function DecomposeModal({ open, onClose, goal, onSaveTasks, onSaveHabits,
           <div className="space-y-4">
             {/* Stats row */}
             <div className="flex gap-3">
-              <div className="flex flex-1 items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2">
-                <Clock className="h-3.5 w-3.5 text-white/30" />
-                <span className="text-xs text-white/60">{result.weeklyHours}h/week</span>
-              </div>
               <div className={cn("flex flex-1 items-center justify-center rounded-lg px-3 py-2 text-xs font-medium", difficultyColor[result.difficulty] ?? "text-white/40 bg-white/5")}>
                 <Zap className="mr-1.5 h-3.5 w-3.5" />
                 {result.difficulty}

@@ -153,12 +153,14 @@ function PredictionViewer({ data }: { data: Record<string, unknown> }) {
 
 // ─── Analysis Viewer ─────────────────────────────────────────────────────────
 
-function AnalysisViewer({ data, onSaveTasks }: {
+function AnalysisViewer({ data, onSaveTasks, onSaveHabits }: {
   data: Record<string, unknown>
   onSaveTasks?: (tasks: string[], title: string, index: number) => Promise<void>
+  onSaveHabits?: (habits: Array<{ title: string; recurrence: string }>) => Promise<void>
 }) {
   const [saved, setSaved] = useState<number[]>([])
   const [saving, setSaving] = useState<number | null>(null)
+  const [habitsSaved, setHabitsSaved] = useState(false)
 
   const handleSave = async (tasks: string[], title: string, index: number) => {
     if (!onSaveTasks || saved.includes(index)) return
@@ -166,6 +168,14 @@ function AnalysisViewer({ data, onSaveTasks }: {
     await onSaveTasks(tasks, title, index)
     setSaved((p) => [...p, index])
     setSaving(null)
+  }
+
+  const handleSaveHabits = async () => {
+    if (!onSaveHabits) return
+    const habits = (data.habits as Array<{ title: string; recurrence: string }> | undefined) ?? []
+    if (!habits.length) return
+    await onSaveHabits(habits)
+    setHabitsSaved(true)
   }
 
   const isStudyPlan = data._type === "STUDY_PLAN"
@@ -228,7 +238,9 @@ function AnalysisViewer({ data, onSaveTasks }: {
   }
 
   // GOAL_DECOMPOSITION format
+  type Habit = { title: string; recurrence: string }
   type Milestone = { title: string; duration: string; tasks: string[] }
+  const habits = (data.habits as Habit[] | undefined) ?? []
   const milestones = (data.milestones as Milestone[] | undefined) ?? []
   const tips = (data.tips as string[] | undefined) ?? []
   return (
@@ -236,6 +248,36 @@ function AnalysisViewer({ data, onSaveTasks }: {
       {!!data.realisticAssessment && (
         <div className="rounded-lg border border-violet-500/20 bg-violet-500/5 px-4 py-3">
           <p className="text-xs leading-relaxed text-violet-300">{String(data.realisticAssessment)}</p>
+        </div>
+      )}
+      {habits.length > 0 && (
+        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-widest text-emerald-400/70">Daily Habits</p>
+              <p className="mt-0.5 text-xs text-white/35">Recurring actions that actually move the needle</p>
+            </div>
+            {onSaveHabits && (
+              <button
+                onClick={handleSaveHabits}
+                disabled={habitsSaved}
+                className="text-[11px] text-emerald-400 hover:text-emerald-300 disabled:text-white/25 transition"
+              >
+                {habitsSaved ? "✓ Added" : "+ Add all habits"}
+              </button>
+            )}
+          </div>
+          <ul className="space-y-1.5">
+            {habits.map((h, i) => (
+              <li key={i} className="flex items-center gap-2 text-xs text-white/65">
+                <div className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400/60" />
+                {h.title}
+                <span className="ml-auto shrink-0 text-[10px] text-white/25">
+                  {h.recurrence === "EVERY_OTHER_DAY" ? "every other day" : "daily"}
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
       {milestones.map((m, i) => (
@@ -694,7 +736,11 @@ export function GoalsClient({ initialGoals }: { initialGoals: Goal[] }) {
             {String(analysisResult.error)}
           </div>
         ) : analysisResult ? (
-          <AnalysisViewer data={analysisResult} onSaveTasks={(tasks, title, idx) => handleSaveTasks(tasks, title, idx, analysisGoal!.id)} />
+          <AnalysisViewer
+            data={analysisResult}
+            onSaveTasks={(tasks, title, idx) => handleSaveTasks(tasks, title, idx, analysisGoal!.id)}
+            onSaveHabits={(habits) => handleSaveHabits(habits, analysisGoal!.id, analysisGoal!.deadline)}
+          />
         ) : null}
       </Modal>
 

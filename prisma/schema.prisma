@@ -97,6 +97,7 @@ model Task {
   skippedDates        String    @default("[]")
   customDates         String    @default("[]")
   completedSections   String    @default("[]")
+  completionLog       String    @default("[]")
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
