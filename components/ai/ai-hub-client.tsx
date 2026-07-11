@@ -52,6 +52,7 @@ function DecisionAnalysis() {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<DecisionResult | null>(null)
   const [error, setError] = useState("")
+  const [taskSaved, setTaskSaved] = useState(false)
 
   const addItem = (list: string[], set: (v: string[]) => void) => set([...list, ""])
   const updateItem = (list: string[], set: (v: string[]) => void, i: number, val: string) => {
@@ -79,6 +80,18 @@ function DecisionAnalysis() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleAddDecisionTask = async () => {
+    if (!result?.nextStep) return
+    const due = new Date(); due.setDate(due.getDate() + 3)
+    await fetch("/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: result.nextStep, priority: "HIGH", dueDate: due.toISOString() }),
+    })
+    setTaskSaved(true)
+    toast.success("Task added")
   }
 
   // transition-colors only — avoids adding transform/backdrop-filter to transition list which can cause GPU glitches on Android Chrome
@@ -126,13 +139,22 @@ function DecisionAnalysis() {
         </div>
 
         <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
-          <p className="mb-1.5 text-[11px] font-medium uppercase tracking-widest text-emerald-400/60">Next action</p>
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            <p className="text-[11px] font-medium uppercase tracking-widest text-emerald-400/60">Next action</p>
+            <button
+              onClick={handleAddDecisionTask}
+              disabled={taskSaved}
+              className="text-[11px] text-emerald-400 hover:text-emerald-300 disabled:text-white/25 transition"
+            >
+              {taskSaved ? "✓ Added" : "+ Add as task"}
+            </button>
+          </div>
           <p className="text-sm text-white/65">{result.nextStep}</p>
         </div>
 
         <Button
           variant="ghost"
-          onClick={() => { setResult(null); setDecision(""); setPros([""]); setCons([""]); setPriorities("") }}
+          onClick={() => { setResult(null); setDecision(""); setPros([""]); setCons([""]); setPriorities(""); setTaskSaved(false) }}
           className="w-full text-xs text-white/30 hover:text-white/60"
         >
           Analyze a different decision
@@ -249,6 +271,8 @@ function WeeklyDebrief() {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<DebriefResult | null>(null)
   const [error, setError] = useState("")
+  const [focusSaved, setFocusSaved] = useState(false)
+  const [slippedSaved, setSlippedSaved] = useState(false)
 
   const handleDebrief = async () => {
     setLoading(true)
@@ -263,6 +287,32 @@ function WeeklyDebrief() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleAddFocusTask = async () => {
+    if (!result?.nextWeekFocus) return
+    const due = new Date(); due.setDate(due.getDate() + 7)
+    await fetch("/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: result.nextWeekFocus, priority: "HIGH", dueDate: due.toISOString() }),
+    })
+    setFocusSaved(true)
+    toast.success("Focus added as task")
+  }
+
+  const handleAddSlippedTasks = async () => {
+    if (!result?.slipped?.length) return
+    const due = new Date(); due.setDate(due.getDate() + 7)
+    await Promise.all(result.slipped.map((title) =>
+      fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, priority: "MEDIUM", dueDate: due.toISOString() }),
+      })
+    ))
+    setSlippedSaved(true)
+    toast.success(`${result.slipped.length} slipped tasks added`)
   }
 
   const scoreColor = result
@@ -318,7 +368,18 @@ function WeeklyDebrief() {
 
             {/* Slipped */}
             <div className="rounded-xl border border-orange-500/20 bg-orange-500/5 p-4">
-              <p className="mb-2 text-[11px] font-medium uppercase tracking-widest text-orange-400/70">Slipped</p>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-[11px] font-medium uppercase tracking-widest text-orange-400/70">Slipped</p>
+                {result.slipped.length > 0 && (
+                  <button
+                    onClick={handleAddSlippedTasks}
+                    disabled={slippedSaved}
+                    className="text-[11px] text-orange-400 hover:text-orange-300 disabled:text-white/25 transition"
+                  >
+                    {slippedSaved ? "✓ Added" : "+ Add as tasks"}
+                  </button>
+                )}
+              </div>
               {result.slipped.length > 0 ? (
                 <ul className="space-y-1.5">
                   {result.slipped.map((s, i) => (
@@ -339,7 +400,16 @@ function WeeklyDebrief() {
 
           {/* Next week focus */}
           <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-4">
-            <p className="mb-1.5 text-[11px] font-medium uppercase tracking-widest text-violet-400/60">Next Week Focus</p>
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <p className="text-[11px] font-medium uppercase tracking-widest text-violet-400/60">Next Week Focus</p>
+              <button
+                onClick={handleAddFocusTask}
+                disabled={focusSaved}
+                className="text-[11px] text-violet-400 hover:text-violet-300 disabled:text-white/25 transition"
+              >
+                {focusSaved ? "✓ Added" : "+ Add as task"}
+              </button>
+            </div>
             <p className="text-sm text-white/65">{result.nextWeekFocus}</p>
           </div>
 
@@ -352,7 +422,7 @@ function WeeklyDebrief() {
             </div>
           </div>
 
-          <Button variant="ghost" onClick={() => setResult(null)} className="w-full text-xs text-white/30 hover:text-white/60">
+          <Button variant="ghost" onClick={() => { setResult(null); setFocusSaved(false); setSlippedSaved(false) }} className="w-full text-xs text-white/30 hover:text-white/60">
             Regenerate
           </Button>
         </div>

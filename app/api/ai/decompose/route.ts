@@ -27,12 +27,18 @@ ${deadlineText}
 
 Return a JSON object with this exact structure:
 {
+  "habits": [
+    {
+      "title": "Daily recurring action title",
+      "recurrence": "DAILY"
+    }
+  ],
   "milestones": [
     {
       "title": "Phase name",
       "duration": "e.g. Week 1-2",
       "description": "What to focus on in this phase",
-      "tasks": ["Specific task 1", "Specific task 2", "Specific task 3"]
+      "tasks": ["Specific one-time setup task 1", "Specific one-time setup task 2"]
     }
   ],
   "weeklyHours": <number — realistic hours per week needed>,
@@ -42,9 +48,9 @@ Return a JSON object with this exact structure:
 }
 
 Rules:
-- 3 to 5 milestones maximum
-- Be specific, not generic
-- Each milestone should have 3-5 concrete tasks
+- habits: 3-6 core daily actions the user must repeat consistently to achieve this goal (e.g. for fitness: eat 4-5 meals/day, drink 3L water, go to gym; for learning: practice 1 hour/day, review flashcards). These become recurring tasks in the user's daily task list. recurrence must be "DAILY" or "EVERY_OTHER_DAY".
+- milestones: 3 to 5 phases of one-time setup and calibration steps (not the daily habits — those go above). Each milestone should have 2-4 concrete one-time tasks.
+- Be specific, not generic. Habits and tasks should be tailored to THIS goal.
 - Be honest about difficulty and time requirements
 - Tips should be specific to THIS goal, not generic productivity advice
 `

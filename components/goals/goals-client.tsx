@@ -392,6 +392,28 @@ export function GoalsClient({ initialGoals }: { initialGoals: Goal[] }) {
     toast.success(`${tasks.length} task${tasks.length !== 1 ? "s" : ""} added`)
   }
 
+  const handleSaveHabits = async (habits: Array<{ title: string; recurrence: string }>, goalId?: string, deadline?: string | null) => {
+    const today = new Date()
+    const endDate = deadline ? new Date(deadline) : new Date(today.getTime() + 180 * 86400000)
+    await Promise.all(
+      habits.map(({ title, recurrence }) =>
+        fetch("/api/tasks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title,
+            priority: "MEDIUM",
+            recurrence: recurrence || "DAILY",
+            startDate: today.toISOString(),
+            recurrenceEndDate: endDate.toISOString(),
+            ...(goalId && { goalId }),
+          }),
+        })
+      )
+    )
+    toast.success(`${habits.length} recurring habit${habits.length !== 1 ? "s" : ""} added to tasks`)
+  }
+
   const handleStatus = async (id: string, status: GoalStatus) => {
     setGoals((p) => p.map((g) => (g.id === id ? { ...g, status } : g)))
     await fetch(`/api/goals/${id}`, {
@@ -644,6 +666,7 @@ export function GoalsClient({ initialGoals }: { initialGoals: Goal[] }) {
           onClose={() => setDecomposeGoal(null)}
           goal={decomposeGoal}
           onSaveTasks={(tasks, title, idx) => handleSaveTasks(tasks, title, idx, decomposeGoal.id)}
+          onSaveHabits={(habits) => handleSaveHabits(habits, decomposeGoal.id, decomposeGoal.deadline)}
           onDecomposed={() =>
             setGoals((p) =>
               p.map((g) => (g.id === decomposeGoal.id ? { ...g, hasAnalysis: true } : g))

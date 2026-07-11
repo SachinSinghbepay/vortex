@@ -7,6 +7,11 @@ import { Modal } from "@/components/ui/modal"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
+interface Habit {
+  title: string
+  recurrence: string
+}
+
 interface Milestone {
   title: string
   duration: string
@@ -15,6 +20,7 @@ interface Milestone {
 }
 
 interface DecomposeResult {
+  habits: Habit[]
   milestones: Milestone[]
   weeklyHours: number
   difficulty: "Easy" | "Medium" | "Hard" | "Very Hard"
@@ -33,6 +39,7 @@ interface Props {
     type: string
   }
   onSaveTasks?: (tasks: string[], milestoneTitle: string, milestoneIndex: number) => void
+  onSaveHabits?: (habits: Habit[]) => void
   onDecomposed?: () => void
 }
 
@@ -43,12 +50,13 @@ const difficultyColor: Record<string, string> = {
   "Very Hard": "text-red-400 bg-red-500/10",
 }
 
-export function DecomposeModal({ open, onClose, goal, onSaveTasks, onDecomposed }: Props) {
+export function DecomposeModal({ open, onClose, goal, onSaveTasks, onSaveHabits, onDecomposed }: Props) {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<DecomposeResult | null>(null)
   const [error, setError] = useState("")
   const [expanded, setExpanded] = useState<number | null>(0)
   const [saved, setSaved] = useState<number[]>([])
+  const [habitsSaved, setHabitsSaved] = useState(false)
   const [copied, setCopied] = useState(false)
 
   const handleCopy = () => {
@@ -95,6 +103,12 @@ export function DecomposeModal({ open, onClose, goal, onSaveTasks, onDecomposed 
   const handleSaveTasks = (i: number, tasks: string[], milestoneTitle: string) => {
     onSaveTasks?.(tasks, milestoneTitle, i)
     setSaved((p) => [...p, i])
+  }
+
+  const handleSaveHabits = () => {
+    if (!result?.habits?.length) return
+    onSaveHabits?.(result.habits)
+    setHabitsSaved(true)
   }
 
   return (
@@ -156,6 +170,40 @@ export function DecomposeModal({ open, onClose, goal, onSaveTasks, onDecomposed 
             <div className="rounded-lg border border-violet-500/20 bg-violet-500/5 px-4 py-3">
               <p className="text-xs leading-relaxed text-violet-300">{result.realisticAssessment}</p>
             </div>
+
+            {/* Daily Habits */}
+            {(result.habits ?? []).length > 0 && (
+              <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-[11px] font-medium uppercase tracking-widest text-emerald-400/70">Daily Habits</p>
+                    <p className="mt-0.5 text-xs text-white/35">Recurring actions that actually move the needle</p>
+                  </div>
+                  {onSaveHabits && (
+                    <Button
+                      size="sm"
+                      onClick={handleSaveHabits}
+                      disabled={habitsSaved}
+                      variant="ghost"
+                      className="h-7 shrink-0 gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 disabled:text-white/25"
+                    >
+                      {habitsSaved ? <><CheckCircle2 className="h-3 w-3" /> Added</> : "+ Add all habits"}
+                    </Button>
+                  )}
+                </div>
+                <ul className="space-y-1.5">
+                  {(result.habits ?? []).map((h, i) => (
+                    <li key={i} className="flex items-center gap-2 text-xs text-white/65">
+                      <div className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400/60" />
+                      {h.title}
+                      <span className="ml-auto shrink-0 text-[10px] text-white/25">
+                        {h.recurrence === "EVERY_OTHER_DAY" ? "every other day" : "daily"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             {/* Milestones */}
             <div className="space-y-2">
@@ -224,7 +272,7 @@ export function DecomposeModal({ open, onClose, goal, onSaveTasks, onDecomposed 
 
             <Button
               variant="ghost"
-              onClick={() => { setResult(null); setSaved([]) }}
+              onClick={() => { setResult(null); setSaved([]); setHabitsSaved(false) }}
               className="flex-1 text-xs text-white/30 hover:text-white/60"
             >
               Generate again
