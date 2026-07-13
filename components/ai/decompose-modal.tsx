@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Sparkles, Loader2, ChevronDown, ChevronUp, Zap, CheckCircle2, Copy, Check } from "lucide-react"
 import { toast } from "sonner"
 import { Modal } from "@/components/ui/modal"
@@ -34,12 +34,14 @@ interface Props {
     id?: string
     title: string
     description?: string | null
+    context?: string | null
     deadline?: string | null
     type: string
   }
   onSaveTasks?: (tasks: string[], milestoneTitle: string, milestoneIndex: number) => void
   onSaveHabits?: (habits: Habit[]) => void
   onDecomposed?: () => void
+  autoGenerate?: boolean
 }
 
 const difficultyColor: Record<string, string> = {
@@ -49,9 +51,10 @@ const difficultyColor: Record<string, string> = {
   "Very Hard": "text-red-400 bg-red-500/10",
 }
 
-export function DecomposeModal({ open, onClose, goal, onSaveTasks, onSaveHabits, onDecomposed }: Props) {
+export function DecomposeModal({ open, onClose, goal, onSaveTasks, onSaveHabits, onDecomposed, autoGenerate }: Props) {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<DecomposeResult | null>(null)
+  const autoTriggeredRef = useRef(false)
   const [error, setError] = useState("")
   const [expanded, setExpanded] = useState<number | null>(0)
   const [saved, setSaved] = useState<number[]>([])
@@ -85,7 +88,7 @@ export function DecomposeModal({ open, onClose, goal, onSaveTasks, onSaveHabits,
       const res = await fetch("/api/ai/decompose", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(goal),
+        body: JSON.stringify({ ...goal, context: goal.context }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
@@ -98,6 +101,13 @@ export function DecomposeModal({ open, onClose, goal, onSaveTasks, onSaveHabits,
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    if (autoGenerate && open && !autoTriggeredRef.current) {
+      autoTriggeredRef.current = true
+      handleDecompose()
+    }
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSaveTasks = (i: number, tasks: string[], milestoneTitle: string) => {
     onSaveTasks?.(tasks, milestoneTitle, i)

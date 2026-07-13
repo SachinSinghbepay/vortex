@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { toast } from "sonner"
-import { Plus, Target, Trash2, Calendar, Sparkles, Shield, Eye, TrendingUp, CheckCircle2, AlertTriangle, XCircle } from "lucide-react"
+import { Plus, Target, Trash2, Calendar, Sparkles, Shield, Eye, TrendingUp, CheckCircle2, AlertTriangle, XCircle, Loader2, ChevronDown, ChevronUp } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Modal } from "@/components/ui/modal"
 import { DecomposeModal } from "@/components/ai/decompose-modal"
@@ -19,6 +19,7 @@ interface Goal {
   id: string
   title: string
   description: string | null
+  context: string | null
   deadline: string | null
   priority: Priority
   progress: number
@@ -325,6 +326,7 @@ export function GoalsClient({ initialGoals }: { initialGoals: Goal[] }) {
   const [showCreate, setShowCreate] = useState(false)
   const [creating, setCreating] = useState(false)
   const [decomposeGoal, setDecomposeGoal] = useState<Goal | null>(null)
+  const [decomposeAutoGenerate, setDecomposeAutoGenerate] = useState(false)
   const [showRealityCheck, setShowRealityCheck] = useState(false)
   const [analysisGoal, setAnalysisGoal] = useState<Goal | null>(null)
   const [analysisResult, setAnalysisResult] = useState<Record<string, unknown> | null>(null)
@@ -366,24 +368,67 @@ export function GoalsClient({ initialGoals }: { initialGoals: Goal[] }) {
     priority: "MEDIUM" as Priority,
     deadline: "",
   })
+  const [createStep, setCreateStep] = useState<1 | 2 | 3>(1)
+  const [questions, setQuestions] = useState<string[]>([])
+  const [answers, setAnswers] = useState<string[]>([])
+  const [questionsLoading, setQuestionsLoading] = useState(false)
+  const [expandedContextGoals, setExpandedContextGoals] = useState<Set<string>>(new Set())
 
   const filtered = filter === "ALL" ? goals : goals.filter((g) => g.status === filter)
 
-  const handleCreate = async () => {
+  const handleCloseCreate = () => {
+    setShowCreate(false)
+    setCreateStep(1)
+    setQuestions([])
+    setAnswers([])
+    setForm({ title: "", description: "", type: "PERSONAL", priority: "MEDIUM", deadline: "" })
+  }
+
+  const fetchQuestions = async () => {
+    setQuestionsLoading(true)
+    try {
+      const res = await fetch("/api/ai/goal-questions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: form.title, type: form.type, description: form.description }),
+      })
+      const data = await res.json()
+      const qs: string[] = data.questions ?? []
+      setQuestions(qs)
+      setAnswers(new Array(qs.length).fill(""))
+      setCreateStep(2)
+    } catch {
+      setCreateStep(3)
+    } finally {
+      setQuestionsLoading(false)
+    }
+  }
+
+  const handleCreate = async (withDecompose = false) => {
     if (!form.title.trim()) return
     setCreating(true)
+    const contextData = questions.length > 0
+      ? JSON.stringify(questions.map((q, i) => ({ q, a: answers[i] ?? "" })).filter(({ a }) => a.trim()))
+      : undefined
     try {
       const res = await fetch("/api/goals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, ...(contextData && { context: contextData }) }),
       })
       if (res.ok) {
         const goal = await res.json()
-        setGoals((p) => [{ ...goal, deadline: goal.deadline ?? null, createdAt: goal.createdAt }, ...p])
-        setShowCreate(false)
-        setForm({ title: "", description: "", type: "PERSONAL", priority: "MEDIUM", deadline: "" })
+        const newGoal: Goal = {
+          ...goal,
+          deadline: goal.deadline ?? null,
+          context: goal.context ?? null,
+          createdAt: goal.createdAt,
+          hasAnalysis: false,
+        }
+        setGoals((p) => [newGoal, ...p])
+        handleCloseCreate()
         toast.success("Goal created")
+        if (withDecompose) setTimeout(() => { setDecomposeAutoGenerate(true); setDecomposeGoal(newGoal) }, 150)
       } else {
         toast.error("Failed to create goal")
       }
@@ -481,7 +526,7 @@ export function GoalsClient({ initialGoals }: { initialGoals: Goal[] }) {
           >
             <Shield className="h-4 w-4" /> Reality Check
           </Button>
-          <Button onClick={() => setShowCreate(true)} className="gap-1.5 bg-violet-600 text-white hover:bg-violet-500">
+          <Button onClick={() => { setShowCreate(true); setCreateStep(1) }} className="gap-1.5 bg-violet-600 text-white hover:bg-violet-500">
             <Plus className="h-4 w-4" /> New Goal
           </Button>
         </div>
@@ -549,8 +594,41 @@ export function GoalsClient({ initialGoals }: { initialGoals: Goal[] }) {
 
                 <h3 className="mb-1 text-sm font-medium text-white">{goal.title}</h3>
                 {goal.description && (
-                  <p className="mb-3 line-clamp-2 text-xs text-white/35">{goal.description}</p>
+                  <p className="mb-1 line-clamp-2 text-xs text-white/35">{goal.description}</p>
                 )}
+                {goal.context && (() => {
+                  try {
+                    const qa = JSON.parse(goal.context) as { q: string; a: string }[]
+                    if (!Array.isArray(qa) || !qa.some(({ a }) => a?.trim())) return null
+                    const isExpanded = expandedContextGoals.has(goal.id)
+                    return (
+                      <div className="mb-3">
+                        <button
+                          onClick={() => setExpandedContextGoals((prev) => {
+                            const next = new Set(prev)
+                            if (next.has(goal.id)) next.delete(goal.id)
+                            else next.add(goal.id)
+                            return next
+                          })}
+                          className="flex items-center gap-1 text-[10px] text-white/25 transition hover:text-white/45"
+                        >
+                          {isExpanded ? <ChevronUp className="h-2.5 w-2.5" /> : <ChevronDown className="h-2.5 w-2.5" />}
+                          {isExpanded ? "Hide context" : "View context"}
+                        </button>
+                        {isExpanded && (
+                          <div className="mt-1.5 space-y-2 rounded-lg border border-white/5 bg-white/2 px-3 py-2">
+                            {qa.filter(({ a }) => a?.trim()).map((item, i) => (
+                              <div key={i}>
+                                <p className="text-[10px] text-white/25">{item.q}</p>
+                                <p className="text-[11px] text-white/50">{item.a}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  } catch { return null }
+                })()}
 
                 {/* Progress */}
                 <div className="mb-4">
@@ -612,7 +690,7 @@ export function GoalsClient({ initialGoals }: { initialGoals: Goal[] }) {
                 {/* AI button */}
                 <div className="mt-3 flex gap-2">
                   <button
-                    onClick={() => setDecomposeGoal(goal)}
+                    onClick={() => { setDecomposeAutoGenerate(false); setDecomposeGoal(goal) }}
                     className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-violet-500/20 bg-violet-500/5 py-1.5 text-[11px] font-medium text-violet-400 transition hover:bg-violet-500/10 hover:text-violet-300"
                   >
                     <Sparkles className="h-3 w-3" />
@@ -639,65 +717,183 @@ export function GoalsClient({ initialGoals }: { initialGoals: Goal[] }) {
         </motion.div>
       )}
 
-      {/* Modal */}
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="New Goal">
+      {/* New Goal Modal — 3-step flow */}
+      <Modal
+        open={showCreate}
+        onClose={handleCloseCreate}
+        title={createStep === 1 ? "New Goal" : createStep === 2 ? "Tell Cortex more" : "Ready to plan"}
+      >
         <div className="space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Title</label>
-            <input
-              value={form.title}
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
-              placeholder="e.g. Learn Spanish to B1"
-              className={inputCls}
-            />
+          {/* Step indicator */}
+          <div className="flex gap-1.5">
+            {[1, 2, 3].map((s) => (
+              <div
+                key={s}
+                className={cn(
+                  "h-0.5 flex-1 rounded-full transition-colors",
+                  s <= createStep ? "bg-violet-500" : "bg-white/10"
+                )}
+              />
+            ))}
           </div>
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Description</label>
-            <textarea
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-              placeholder="Optional details..."
-              rows={2}
-              className={cn(inputCls, "resize-none")}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Type</label>
-              <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as GoalType })} className={selectCls}>
-                <option value="PERSONAL" className="bg-[#1a1a1a] text-white">Personal</option>
-                <option value="LEARNING" className="bg-[#1a1a1a] text-white">Learning</option>
-                <option value="FITNESS" className="bg-[#1a1a1a] text-white">Fitness</option>
-                <option value="CAREER" className="bg-[#1a1a1a] text-white">Career</option>
-                <option value="CUSTOM" className="bg-[#1a1a1a] text-white">Custom</option>
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Priority</label>
-              <select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value as Priority })} className={selectCls}>
-                <option value="LOW" className="bg-[#1a1a1a] text-white">Low</option>
-                <option value="MEDIUM" className="bg-[#1a1a1a] text-white">Medium</option>
-                <option value="HIGH" className="bg-[#1a1a1a] text-white">High</option>
-                <option value="URGENT" className="bg-[#1a1a1a] text-white">Urgent</option>
-              </select>
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Deadline</label>
-            <input
-              type="date"
-              value={form.deadline}
-              onChange={(e) => setForm({ ...form, deadline: e.target.value })}
-              className={cn(inputCls, "[color-scheme:dark]")}
-            />
-          </div>
-          <Button
-            onClick={handleCreate}
-            disabled={!form.title.trim() || creating}
-            className="w-full bg-violet-600 text-white hover:bg-violet-500"
-          >
-            {creating ? "Creating..." : "Create Goal"}
-          </Button>
+
+          {/* ── Step 1: Goal details ── */}
+          {createStep === 1 && (
+            <>
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Title</label>
+                <input
+                  value={form.title}
+                  onChange={(e) => setForm({ ...form, title: e.target.value })}
+                  placeholder="e.g. Learn Spanish to B1"
+                  className={inputCls}
+                  autoFocus
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Description</label>
+                <textarea
+                  value={form.description}
+                  onChange={(e) => setForm({ ...form, description: e.target.value })}
+                  placeholder="Optional details..."
+                  rows={2}
+                  className={cn(inputCls, "resize-none")}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Type</label>
+                  <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as GoalType })} className={selectCls}>
+                    <option value="PERSONAL" className="bg-[#1a1a1a] text-white">Personal</option>
+                    <option value="LEARNING" className="bg-[#1a1a1a] text-white">Learning</option>
+                    <option value="FITNESS" className="bg-[#1a1a1a] text-white">Fitness</option>
+                    <option value="CAREER" className="bg-[#1a1a1a] text-white">Career</option>
+                    <option value="CUSTOM" className="bg-[#1a1a1a] text-white">Custom</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Priority</label>
+                  <select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value as Priority })} className={selectCls}>
+                    <option value="LOW" className="bg-[#1a1a1a] text-white">Low</option>
+                    <option value="MEDIUM" className="bg-[#1a1a1a] text-white">Medium</option>
+                    <option value="HIGH" className="bg-[#1a1a1a] text-white">High</option>
+                    <option value="URGENT" className="bg-[#1a1a1a] text-white">Urgent</option>
+                  </select>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-medium uppercase tracking-widest text-white/35">Deadline</label>
+                <input
+                  type="date"
+                  value={form.deadline}
+                  onChange={(e) => setForm({ ...form, deadline: e.target.value })}
+                  className={cn(inputCls, "scheme-dark")}
+                />
+              </div>
+              <Button
+                onClick={fetchQuestions}
+                disabled={!form.title.trim() || questionsLoading}
+                className="w-full gap-2 bg-violet-600 text-white hover:bg-violet-500"
+              >
+                {questionsLoading ? (
+                  <><Loader2 className="h-4 w-4 animate-spin" /> Preparing questions…</>
+                ) : (
+                  "Next →"
+                )}
+              </Button>
+            </>
+          )}
+
+          {/* ── Step 2: AI Q&A ── */}
+          {createStep === 2 && (
+            <>
+              <div>
+                <p className="text-sm font-medium text-white">A few quick questions</p>
+                <p className="mt-0.5 text-xs text-white/40">Cortex uses this to build a plan specific to you — answer what you can</p>
+              </div>
+              {questions.map((q, i) => (
+                <div key={i} className="space-y-1.5">
+                  <label className="text-xs text-white/60">{q}</label>
+                  <input
+                    value={answers[i] ?? ""}
+                    onChange={(e) => setAnswers((prev) => { const next = [...prev]; next[i] = e.target.value; return next })}
+                    placeholder="Your answer…"
+                    className={inputCls}
+                  />
+                </div>
+              ))}
+              <div className="flex gap-2">
+                <Button variant="ghost" onClick={() => setCreateStep(1)} className="flex-1 text-xs text-white/40 hover:text-white/70">
+                  ← Back
+                </Button>
+                <Button onClick={() => setCreateStep(3)} className="flex-1 bg-violet-600 text-white hover:bg-violet-500">
+                  Continue →
+                </Button>
+              </div>
+            </>
+          )}
+
+          {/* ── Step 3: Review + action ── */}
+          {createStep === 3 && (
+            <>
+              {/* Summary preview */}
+              <div className="rounded-xl border border-white/[0.07] bg-white/3 p-4 space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-medium text-white">{form.title}</p>
+                  <span className={cn("shrink-0 rounded-md px-2 py-0.5 text-[10px] font-medium", typeConfig[form.type].bg, typeConfig[form.type].color)}>
+                    {typeConfig[form.type].label}
+                  </span>
+                </div>
+                {form.description && (
+                  <p className="text-xs text-white/40">{form.description}</p>
+                )}
+                {questions.some((_, i) => answers[i]?.trim()) && (
+                  <div className="space-y-1.5 border-t border-white/6 pt-2">
+                    {questions.map((q, i) =>
+                      answers[i]?.trim() ? (
+                        <div key={i}>
+                          <p className="text-[10px] text-white/30">{q}</p>
+                          <p className="text-xs text-white/55">{answers[i]}</p>
+                        </div>
+                      ) : null
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="rounded-lg border border-violet-500/20 bg-violet-500/5 px-4 py-3">
+                <p className="text-xs text-violet-300/80">
+                  Cortex has enough context to generate a personalized roadmap with specific tasks and habits for this goal.
+                </p>
+              </div>
+              <Button
+                onClick={() => handleCreate(true)}
+                disabled={creating}
+                className="w-full gap-2 bg-violet-600 text-white hover:bg-violet-500"
+              >
+                {creating ? (
+                  <><Loader2 className="h-4 w-4 animate-spin" /> Creating…</>
+                ) : (
+                  <><Sparkles className="h-4 w-4" /> Decompose &amp; Create Goal</>
+                )}
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => handleCreate(false)}
+                disabled={creating}
+                className="w-full text-xs text-white/30 hover:text-white/60"
+              >
+                Skip analysis, create goal
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => setCreateStep(2)}
+                disabled={creating}
+                className="w-full text-[11px] text-white/20 hover:text-white/40"
+              >
+                ← Back
+              </Button>
+            </>
+          )}
         </div>
       </Modal>
 
@@ -705,8 +901,9 @@ export function GoalsClient({ initialGoals }: { initialGoals: Goal[] }) {
       {decomposeGoal && (
         <DecomposeModal
           open={!!decomposeGoal}
-          onClose={() => setDecomposeGoal(null)}
+          onClose={() => { setDecomposeGoal(null); setDecomposeAutoGenerate(false) }}
           goal={decomposeGoal}
+          autoGenerate={decomposeAutoGenerate}
           onSaveTasks={(tasks, title, idx) => handleSaveTasks(tasks, title, idx, decomposeGoal.id)}
           onSaveHabits={(habits) => handleSaveHabits(habits, decomposeGoal.id, decomposeGoal.deadline)}
           onDecomposed={() =>

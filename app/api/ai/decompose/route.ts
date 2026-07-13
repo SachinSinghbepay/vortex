@@ -9,7 +9,7 @@ export async function POST(req: Request) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  const { id, goalId: gid, title, description, deadline, type } = await req.json()
+  const { id, goalId: gid, title, description, context, deadline, type } = await req.json()
   const goalId = gid ?? id ?? null
   if (!title) return NextResponse.json({ error: "Goal title required" }, { status: 400 })
 
@@ -17,13 +17,26 @@ export async function POST(req: Request) {
     ? `Deadline: ${new Date(deadline).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`
     : "No specific deadline"
 
+  let contextText = ""
+  if (context) {
+    try {
+      const qa = JSON.parse(context) as { q: string; a: string }[]
+      if (Array.isArray(qa) && qa.length > 0) {
+        const filled = qa.filter(({ a }) => a?.trim())
+        if (filled.length > 0) {
+          contextText = `\nUser context (use this to make tasks and habits specific to their situation):\n${filled.map(({ q, a }) => `- ${q}: ${a}`).join("\n")}`
+        }
+      }
+    } catch { /* ignore */ }
+  }
+
   const prompt = `
 You are a world-class productivity coach and goal strategist. Break down the following goal into a realistic, actionable plan.
 
 Goal: "${title}"
-${description ? `Context: ${description}` : ""}
+${description ? `Description: ${description}` : ""}
 Type: ${type}
-${deadlineText}
+${deadlineText}${contextText}
 
 Return a JSON object with this exact structure:
 {
@@ -47,11 +60,12 @@ Return a JSON object with this exact structure:
 }
 
 Rules:
-- habits: 3-6 core daily actions the user must repeat consistently to achieve this goal (e.g. for fitness: eat 4-5 meals/day, drink 3L water, go to gym; for learning: practice 1 hour/day, review flashcards). These become recurring tasks in the user's daily task list. recurrence must be "DAILY" or "EVERY_OTHER_DAY".
-- milestones: 3 to 5 phases of one-time setup and calibration steps (not the daily habits — those go above). Each milestone should have 2-4 concrete one-time tasks.
-- Be specific, not generic. Habits and tasks should be tailored to THIS goal.
+- USE THE USER CONTEXT above to make everything specific. If user said they weigh 58kg, mention that. If they train 4 days/week, reflect that in habits. Generic output is a failure.
+- habits: 3-6 core daily/recurring actions the user must repeat consistently. Make them concrete and quantified (e.g. "Eat 5 meals with 25g protein each", "Drink 3L water", "Weight training — 4x/week"). recurrence must be "DAILY" or "EVERY_OTHER_DAY".
+- milestones: 3 to 5 phases of one-time setup and measurement steps (not the daily habits). Each milestone should have 2-4 concrete one-time tasks specific to the user's situation.
+- milestones are for setup, measurement, calibration — not generic phases like "Start your journey". Include numbers from the user's context where possible.
 - Be honest about difficulty and time requirements
-- Tips should be specific to THIS goal, not generic productivity advice
+- Tips should reference the user's specific numbers and constraints, not generic advice
 `
 
   try {

@@ -20,13 +20,14 @@ export async function POST(req: Request) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  const { title, description, deadline, priority, type } = await req.json()
+  const { title, description, context, deadline, priority, type } = await req.json()
   if (!title?.trim()) return NextResponse.json({ error: "Title required" }, { status: 400 })
 
   const goal = await db.goal.create({
     data: {
       title: title.trim(),
       description: description?.trim() || null,
+      context: context || null,
       deadline: deadline ? new Date(deadline) : null,
       priority: priority || "MEDIUM",
       type: type || "PERSONAL",

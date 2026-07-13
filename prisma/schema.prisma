@@ -71,6 +71,7 @@ model Goal {
   id          String     @id @default(cuid())
   title       String
   description String?
+  context     String?
   deadline    DateTime?
   priority    Priority   @default(MEDIUM)
   progress    Int        @default(0)
